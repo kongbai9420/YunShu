@@ -1255,10 +1255,21 @@ function applyStatusData(d) {
   renderTitlebarPill();
 
   // STRICT TAB ISOLATION:
-  // ONLY render and mutate DOM for tabs that are actually visible!
-  // When user is on any other tab (Curve, Manual Fans, Presets, Servers, Preferences, About):
-  // The background polling DOES NOT TOUCH THE DOM AT ALL.
+  // ONLY render and mutate DOM for tabs that are actually visible and display real-time monitoring data!
+  // When user is on any other tab (Settings, Servers management, Curve, Manual Fans, Presets, Ops, About):
+  // The background polling DOES NOT TOUCH OR INTERFERE WITH THE DOM AT ALL.
+  // Furthermore, if any modal dialog (Add/Edit server form, etc.) is currently open, skip dashboard re-render
+  // so focus, input selection and typing are NEVER disrupted by 1s polling!
+  const isAnyModalOpen = () => {
+    return Array.from(document.querySelectorAll('.apple-modal-backdrop')).some(m => {
+      return m.style.display && m.style.display !== 'none';
+    });
+  };
+
   if (state.activeTab === 'dashboard') {
+    if (isAnyModalOpen()) {
+      return; // Do not re-render dashboard DOM while user is editing inside a modal
+    }
     if (state.dashboardViewMode === 'detail') {
       renderDashboardMetrics();
       renderSensorsTable();
@@ -1266,7 +1277,8 @@ function applyStatusData(d) {
       renderProbeClusterMatrix();
     }
   } else if (state.activeTab === 'alerts') {
-    renderAlertsCenter();
+    // 仅当用户未聚焦输入报警配置表单时才更新历史告警表格
+    renderAlertHistoryOnly();
   } else if (state.activeTab === 'logs') {
     refreshSystemLogs(false);
   }
@@ -4404,10 +4416,39 @@ function initAlertCenterTab() {
   }
 }
 
+function renderAlertHistoryOnly() {
+  const tbody = document.getElementById('alertHistoryTableBody');
+  if (!tbody) return;
+
+  const history = state.alert_history || [];
+  if (history.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="5" style="text-align:center; padding:24px; color:var(--text-tertiary);">暂无告警记录，系统运行平稳健康</td>
+      </tr>
+    `;
+    return;
+  }
+
+  tbody.innerHTML = history.map(item => `
+    <tr class="${item.level === 'danger' ? 'alert-row-danger' : 'alert-row-warning'}">
+      <td style="font-family:var(--font-mono); font-size:11.5px;">${item.time}</td>
+      <td style="font-weight:600;">${item.source}</td>
+      <td>
+        <span class="badge ${item.level === 'danger' ? 'badge-danger' : 'badge-warning'}">${item.title}</span>
+      </td>
+      <td style="color:var(--text-secondary); font-size:12px;">${item.message}</td>
+      <td>
+        <span class="badge ${item.level === 'danger' ? 'badge-danger' : 'badge-warning'}">${item.level.toUpperCase()}</span>
+      </td>
+    </tr>
+  `).join('');
+}
+
 function renderAlertsCenter() {
   const cfg = state.alert_config || {};
 
-  // Fill in form values
+  // Fill in form values (Only executed when explicitly switching to alerts tab)
   if (cfg.enabled !== undefined) document.getElementById('alertGlobalEnabled').checked = !!cfg.enabled;
   if (cfg.sound_enabled !== undefined) document.getElementById('alertSoundEnabled').checked = !!cfg.sound_enabled;
   if (cfg.sound_type) {
@@ -4443,32 +4484,7 @@ function renderAlertsCenter() {
   if (cfg.server_disk_threshold !== undefined) document.getElementById('threshServerDisk').value = cfg.server_disk_threshold;
 
   // Render History Table
-  const tbody = document.getElementById('alertHistoryTableBody');
-  if (!tbody) return;
-
-  const history = state.alert_history || [];
-  if (history.length === 0) {
-    tbody.innerHTML = `
-      <tr>
-        <td colspan="5" style="text-align:center; padding:24px; color:var(--text-tertiary);">暂无告警记录，系统运行平稳健康</td>
-      </tr>
-    `;
-    return;
-  }
-
-  tbody.innerHTML = history.map(item => `
-    <tr class="${item.level === 'danger' ? 'alert-row-danger' : 'alert-row-warning'}">
-      <td style="font-family:var(--font-mono); font-size:11.5px;">${item.time}</td>
-      <td style="font-weight:600;">${item.source}</td>
-      <td>
-        <span class="badge ${item.level === 'danger' ? 'badge-danger' : 'badge-warning'}">${item.title}</span>
-      </td>
-      <td style="color:var(--text-secondary); font-size:12px;">${item.message}</td>
-      <td>
-        <span class="badge ${item.level === 'danger' ? 'badge-danger' : 'badge-warning'}">${item.level.toUpperCase()}</span>
-      </td>
-    </tr>
-  `).join('');
+  renderAlertHistoryOnly();
 }
 
 // ==========================================
