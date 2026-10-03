@@ -50,6 +50,7 @@ venv.bak/
 
 # Local Release staging & legacy test folders
 云枢-Release/
+yunshu-web/
 Dell_EMC_Fans_Controller_*
 apple-design-skill/
 .vscode/
