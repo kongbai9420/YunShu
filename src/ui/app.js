@@ -1029,13 +1029,6 @@ function initDashboardControls() {
       document.querySelector('.nav-item[data-tab="servers"]').click();
     });
   }
-  const btnAddQuick = document.getElementById('btnAddServerQuick');
-  if (btnAddQuick) {
-    btnAddQuick.addEventListener('click', (e) => {
-      e.preventDefault();
-      triggerOpenAddHardwareNodeModal();
-    });
-  }
 
   // Probe Layout Switcher (方块 Grid / 长条 Row)
   const probeLayoutSwitch = document.getElementById('probeLayoutSwitch');
