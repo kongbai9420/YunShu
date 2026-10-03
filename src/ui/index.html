@@ -1,0 +1,1998 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>云枢 · 多品牌服务器集群温控与运维中心</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="theme-dark">
+  <div class="window-shell">
+    
+    <!-- Top macOS Unified Titlebar (Frameless Header with Liquid Glass) -->
+    <header class="mac-titlebar" id="appMainTitlebar">
+      
+      <!-- Traffic Light Window Controls (Zero duplicate Windows buttons!) -->
+      <div class="traffic-lights">
+        <button class="traffic-light close" id="btnWindowClose" title="关闭应用">
+          <svg viewBox="0 0 10 10"><path d="M2.5 2.5L7.5 7.5M7.5 2.5L2.5 7.5" stroke="currentColor" stroke-width="1.2"/></svg>
+        </button>
+        <button class="traffic-light minimize" id="btnWindowMin" title="最小化到任务栏">
+          <svg viewBox="0 0 10 10"><path d="M2 5H8" stroke="currentColor" stroke-width="1.2"/></svg>
+        </button>
+        <button class="traffic-light zoom" id="btnWindowMax" title="缩放/最大化">
+          <svg viewBox="0 0 10 10"><path d="M2.5 2.5H7.5V7.5H2.5Z" stroke="currentColor" stroke-width="1.2" fill="none"/></svg>
+        </button>
+      </div>
+
+      <div class="titlebar-center">
+        <span class="app-brand-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="9"/>
+            <path d="M12 12c-2.5-3.5-1-6 1-7 2 1 2.5 4 0 7z"/>
+            <path d="M12 12c3.5-2.5 6-1 7 1-1 2-4 2.5-7 0z"/>
+            <path d="M12 12c2.5 3.5 1 6-1 7-2-1-2.5-4 0-7z"/>
+            <path d="M12 12c-3.5 2.5-6 1-7-1 1-2 4-2.5 7 0z"/>
+          </svg>
+        </span>
+        <span class="window-title">云枢</span>
+        <span class="title-sep">·</span>
+        <span class="title-sub">服务器集群管理与温控系统</span>
+      </div>
+
+      <div class="titlebar-right">
+        <!-- Dual Status Pills: 节点在线 与 服务器在线 分开独立显示 -->
+        <div class="connection-pill connected" id="nodeConnectionPill" title="物理 IPMI 硬件节点在线数量">
+          <span class="status-dot" id="nodeStatusDot"></span>
+          <span class="status-text" id="nodeConnectionText">节点: 0/0 在线</span>
+        </div>
+
+        <div class="connection-pill connected" id="serverConnectionPill" title="Linux 系统服务器在线数量">
+          <span class="status-dot" id="serverStatusDot"></span>
+          <span class="status-text" id="serverConnectionText">服务器: 0/0 在线</span>
+        </div>
+
+        <!-- Demo Mode switch -->
+        <button class="pill-btn demo-btn" id="btnToggleDemo" title="切换真实服务器 / 演示体验模式">
+          <span class="demo-indicator"></span>
+          <span class="demo-btn-label">演示仿真</span>
+        </button>
+
+        <!-- Theme toggle -->
+        <button class="icon-btn theme-toggle" id="btnThemeToggle" title="切换深色/浅色外观">
+          <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="5"/>
+            <line x1="12" y1="1" x2="12" y2="3"/>
+            <line x1="12" y1="21" x2="12" y2="23"/>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+            <line x1="1" y1="12" x2="3" y2="12"/>
+            <line x1="21" y1="12" x2="23" y2="12"/>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+          </svg>
+          <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Workspace: macOS Sidebar + Content Pane -->
+    <div class="mac-workspace">
+      
+      <!-- Functional Layer Sidebar (Apple HIG Pure Naming) -->
+      <aside class="mac-sidebar">
+        <div>
+          <div class="sidebar-section-title">状态监控</div>
+          <nav class="sidebar-nav">
+            <button class="nav-item active" data-tab="dashboard">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="7" height="9" rx="1.5"/>
+                <rect x="14" y="3" width="7" height="5" rx="1.5"/>
+                <rect x="14" y="12" width="7" height="9" rx="1.5"/>
+                <rect x="3" y="16" width="7" height="5" rx="1.5"/>
+              </svg>
+              <span class="nav-label">概览监控</span>
+            </button>
+          </nav>
+
+          <div class="sidebar-section-title" style="margin-top: 20px;">节点温控</div>
+          <nav class="sidebar-nav">
+            <button class="nav-item" data-tab="curve">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 19a9 9 0 0 1 9 0 9 9 0 0 0 9 0"/>
+                <path d="M3 12a9 9 0 0 1 9 0 9 9 0 0 0 9 0"/>
+                <path d="M3 5a9 9 0 0 1 9 0 9 9 0 0 0 9 0"/>
+              </svg>
+              <span class="nav-label">动态曲线</span>
+            </button>
+
+            <button class="nav-item" data-tab="fans">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="9"/>
+                <path d="M12 12c-2-3-1-5 1-6 2 1 2 3 0 6z"/>
+                <path d="M12 12c3-2 5-1 6 1-1 2-3 2-6 0z"/>
+                <path d="M12 12c2 3 1 5-1 6-2-1-2-3 0-6z"/>
+                <path d="M12 12c-3 2-5 1-6-1 1-2 3-2 6 0z"/>
+              </svg>
+              <span class="nav-label">手动调速</span>
+            </button>
+
+            <button class="nav-item" data-tab="presets">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+              </svg>
+              <span class="nav-label">情景方案</span>
+            </button>
+          </nav>
+
+          <div class="sidebar-section-title" style="margin-top: 20px;">系统与设备</div>
+          <nav class="sidebar-nav">
+            <button class="nav-item" data-tab="servers">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
+                <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
+                <line x1="6" y1="6" x2="6.01" y2="6"/>
+                <line x1="6" y1="18" x2="6.01" y2="18"/>
+              </svg>
+              <span class="nav-label">集群管理</span>
+            </button>
+
+            <button class="nav-item" data-tab="alerts">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+              </svg>
+              <span class="nav-label">智能告警中心</span>
+              <span class="badge badge-danger" id="navAlertBadge" style="display:none; margin-left:auto; font-size:10px; padding:1px 6px;">0</span>
+            </button>
+
+            <button class="nav-item" data-tab="ops">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="4 17 10 11 4 5"/>
+                <line x1="12" y1="19" x2="20" y2="19"/>
+              </svg>
+              <span class="nav-label">批量运维平台</span>
+            </button>
+
+            <!-- 新增: 系统运行日志菜单 -->
+            <button class="nav-item" data-tab="logs">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+                <line x1="10" y1="9" x2="8" y2="9"/>
+              </svg>
+              <span class="nav-label">系统运行日志</span>
+            </button>
+
+            <button class="nav-item" data-tab="settings">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+              </svg>
+              <span class="nav-label">通用首选项</span>
+            </button>
+
+            <!-- 关于软件: 完美融合在左侧菜单同一层级 -->
+            <button class="nav-item" data-tab="about">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="16" x2="12" y2="12"/>
+                <line x1="12" y1="8" x2="12.01" y2="8"/>
+              </svg>
+              <span class="nav-label">关于软件</span>
+            </button>
+          </nav>
+        </div>
+
+        <!-- Sidebar footer: 简洁版本状态标识 -->
+        <div class="sidebar-footer">
+          <div class="app-version-tag">云枢 v3.6 · Apple Edition</div>
+        </div>
+      </aside>
+
+      <!-- Content Layer: Opaque, crisp surfaces & cards -->
+      <main class="mac-content-pane">
+
+        <!-- ==================== TAB 1: DASHBOARD ==================== -->
+        <section class="tab-pane active" id="pane-dashboard">
+          
+          <div class="hero-header-row" id="dashHeroHeader" style="margin-bottom: 10px; align-items: center; justify-content:space-between; gap:12px; flex-wrap:nowrap;">
+            <div style="display:flex; align-items:center; gap:10px; min-width:0; flex:1 1 auto; overflow:hidden;">
+              <h1 class="page-title" style="font-size:16px; font-weight:700; margin:0; white-space:nowrap; flex-shrink:0;">概览监控</h1>
+              <span class="badge badge-cool" style="font-size:10px; padding:1px 6px; white-space:nowrap; flex-shrink:0;">节点与服务器架构</span>
+              <span class="page-desc" style="font-size:11.5px; margin:0; color:var(--text-tertiary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0;">
+                实时巡检物理 IPMI 节点与 Linux 服务器，支持总览全景透视与分类独立监管
+              </span>
+            </div>
+
+            <!-- 核心概念三联切换分段器：总览 / 节点 / 服务器 (单行紧凑并列，对齐胶囊高度) -->
+            <div class="apple-segmented-control" id="conceptViewSegment">
+              <button class="seg-btn active" data-concept="overview">
+                <span>🌐 总览</span>
+              </button>
+              <button class="seg-btn" data-concept="nodes">
+                <span>🖥️ 硬件节点</span>
+              </button>
+              <button class="seg-btn" data-concept="servers">
+                <span>🐧 系统服务器</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Safety Guard Warning Banner -->
+          <div class="alert-banner warning" id="safetyAlertBanner" style="display: none;">
+            <svg class="alert-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/>
+              <line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            <div class="alert-content">
+              <strong>超温防护已触发！</strong>
+              <span>CPU 温度已超过安全熔断警戒线 (<span id="alertSafetyThreshold">82</span>°C)，已自动恢复 Dell 原厂动态保护接管！</span>
+            </div>
+          </div>
+
+          <!-- ==================== SUB-VIEW A: PROBE CLUSTER MATRIX ==================== -->
+          <div class="probe-cluster-view" id="probeClusterView">
+            <div class="section-heading-row">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <h2 class="section-title">集群探针矩阵 (<span id="probeClusterCount">2</span> 台服务器)</h2>
+                <span class="badge badge-cool">多机独立受控</span>
+                <!-- 首页集群总功耗动态胶囊 -->
+                <span class="micro-capsule capsule-orange" id="clusterTotalPowerBadge" style="display:inline-flex; align-items:center; gap:4px; font-size:11px; padding:2px 8px; border-radius:9999px; font-weight:700; background:rgba(255, 149, 0, 0.12); color:var(--system-orange); border:1px solid rgba(255, 149, 0, 0.25);" title="当前所有在线硬件节点实时功耗之和 (集群瞬时总负荷)">
+                  <span>⚡ 集群总功耗:</span>
+                  <span id="clusterTotalPowerVal">-- W</span>
+                </span>
+              </div>
+              <div style="display:flex; align-items:center; gap:10px;">
+                <!-- Layout Style Switcher (方块 Grid / 条形 Row) 左右滑动胶囊，对齐尺寸规范 -->
+                <div class="apple-segmented-control layout-switch-capsule" id="probeLayoutSwitch">
+                  <button class="seg-btn active" data-style="compact_grid" title="方块卡片视图">
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
+                      <rect x="3" y="3" width="7" height="7"/>
+                      <rect x="14" y="3" width="7" height="7"/>
+                      <rect x="14" y="14" width="7" height="7"/>
+                      <rect x="3" y="14" width="7" height="7"/>
+                    </svg>
+                    <span>方块</span>
+                  </button>
+                  <button class="seg-btn" data-style="compact_row" title="长条列表视图">
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
+                      <line x1="3" y1="6" x2="21" y2="6"/>
+                      <line x1="3" y1="12" x2="21" y2="12"/>
+                      <line x1="3" y1="18" x2="21" y2="18"/>
+                    </svg>
+                    <span>长条</span>
+                  </button>
+                </div>
+                <button class="secondary-btn" id="btnAddServerQuick">+ 添加服务器</button>
+              </div>
+            </div>
+
+            <!-- Toolbar: Multi-select & Status Filters -->
+            <div class="probe-toolbar-row">
+              <div class="probe-filter-group" id="probeFilterPills">
+                <button class="filter-pill active" data-filter="all">全部显示</button>
+                <button class="filter-pill" data-filter="online">仅联机在线</button>
+                <button class="filter-pill" data-filter="offline">仅离线</button>
+                <button class="filter-pill" data-filter="auto">⚪ 原厂托管</button>
+                <button class="filter-pill" data-filter="dynamic">📈 动态曲线</button>
+                <button class="filter-pill" data-filter="manual">🎛️ 手动调速</button>
+                <button class="filter-pill" data-filter="preset">⚡ 情景方案</button>
+              </div>
+
+              <div style="display:flex; align-items:center; gap:8px;">
+                <label style="display:flex; align-items:center; gap:6px; font-size:12px; cursor:pointer; color:var(--text-secondary);">
+                  <input type="checkbox" id="chkSelectAllServers" class="probe-checkbox">
+                  <span>全选所有服务器</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- Floating / Animated Batch Action Bar (Appears when servers selected) -->
+            <div class="batch-action-bar" id="batchActionBar" style="display: none;">
+              <div class="batch-info">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M9 11l3 3L22 4"/>
+                  <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+                </svg>
+                <span>已勾选 <span id="batchSelectedCount">0</span> 台服务器</span>
+              </div>
+              <div class="batch-btns-group">
+                <span style="font-size:11px; color:var(--text-tertiary);">批量统一设为:</span>
+                <button class="batch-btn" id="btnBatchSetAuto">⚪ 原厂托管</button>
+                <button class="batch-btn" id="btnBatchSetDynamic">📈 动态曲线</button>
+                <button class="batch-btn" id="btnBatchSetManual">🎛️ 手动固定</button>
+                <button class="batch-btn" id="btnBatchSetPreset">⚡ 情景方案</button>
+                <button class="secondary-btn" id="btnBatchClearSelection" style="padding:3px 8px; font-size:11px; margin-left:6px;">取消全选</button>
+              </div>
+            </div>
+
+            <div class="probe-cards-grid compact-grid" id="probeCardsContainer">
+              <!-- Dynamically populated probe cards with per-server 4 thermal modes -->
+            </div>
+          </div>
+
+          <!-- ==================== SUB-VIEW B: FOCUSED NODE DETAIL ==================== -->
+          <div class="focused-detail-view" id="focusedDetailView" style="display: none;">
+            
+            <!-- Focused Node Prominent Navigation Bar (Apple HIG Breadcrumb & Back Action) -->
+            <div class="focused-server-bar">
+              <div style="display:flex; align-items:center; gap:14px;">
+                <button class="primary-btn btn-prominent-back" id="btnBackToCluster">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                  </svg>
+                  <span>返回集群矩阵</span>
+                </button>
+
+                <div style="height:20px; width:1px; background:var(--border-subtle);"></div>
+
+                <div class="detail-node-crumb">
+                  <span class="crumb-label">当前聚焦服务器:</span>
+                  <select class="apple-select crumb-select" id="focusedServerSelect">
+                    <!-- Populated from servers list -->
+                  </select>
+                </div>
+              </div>
+
+              <div style="display:flex; align-items:center; gap:10px;">
+                <span class="badge badge-normal" id="detailServerStatusBadge" style="font-size:12px; font-weight:600; padding:4px 10px;">● 联机受控</span>
+                <div class="refresh-rate-pill">
+                  <span>采样刷新: </span>
+                  <strong id="dashRefreshRateBadge">3s</strong>
+                </div>
+              </div>
+            </div>
+
+            <!-- Cards Grid: Metrics -->
+            <div class="dashboard-grid">
+              
+              <!-- CPU Temp Card -->
+              <div class="apple-card stat-card">
+                <div class="card-header">
+                  <span class="card-tag">最高核心温度</span>
+                  <span class="badge badge-normal" id="cpuTempBadge">等待采集</span>
+                </div>
+                <div class="big-metric-row">
+                  <span class="big-number" id="dashMaxCpuTemp">--</span>
+                  <span class="big-unit">°C</span>
+                </div>
+                <div class="temp-sub-list" id="dashCpuTempList">
+                  <div class="temp-sub-item">
+                    <span class="sub-name">CPU1 核心</span>
+                    <span class="sub-val" id="dashCpu1Temp">-- °C</span>
+                  </div>
+                  <div class="temp-sub-item">
+                    <span class="sub-name">CPU2 核心</span>
+                    <span class="sub-val" id="dashCpu2Temp">-- °C</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Inlet / Ambient Temp Card -->
+              <div class="apple-card stat-card">
+                <div class="card-header">
+                  <span class="card-tag">进风口与环境</span>
+                  <span class="badge badge-cool">环境探针</span>
+                </div>
+                <div class="big-metric-row">
+                  <span class="big-number" id="dashInletTemp">--</span>
+                  <span class="big-unit">°C</span>
+                </div>
+                <div class="temp-sub-list">
+                  <div class="temp-sub-item">
+                    <span class="sub-name">Inlet 进气口</span>
+                    <span class="sub-val" id="dashInletVal">-- °C</span>
+                  </div>
+                  <div class="temp-sub-item">
+                    <span class="sub-name">出风口排气温</span>
+                    <span class="sub-val" id="dashExhaustVal">-- °C</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Fan Overall State Card with Rotating Turbine -->
+              <div class="apple-card stat-card turbine-card">
+                <div class="turbine-layout">
+                  <div class="turbine-container">
+                    <svg class="turbine-svg" id="turbineSvg" viewBox="0 0 100 100">
+                      <circle cx="50" cy="50" r="46" fill="none" stroke="var(--border-subtle)" stroke-width="3"/>
+                      <g class="blades" id="turbineBlades">
+                        <path d="M50 50 C40 30, 45 15, 50 8 C55 15, 60 30, 50 50 Z" fill="var(--system-blue)"/>
+                        <path d="M50 50 C30 60, 15 55, 8 50 C15 45, 30 40, 50 50 Z" fill="var(--system-blue)"/>
+                        <path d="M50 50 C60 70, 55 85, 50 92 C45 85, 40 70, 50 50 Z" fill="var(--system-blue)"/>
+                        <path d="M50 50 C70 40, 85 45, 92 50 C85 55, 70 60, 50 50 Z" fill="var(--system-blue)"/>
+                      </g>
+                      <circle cx="50" cy="50" r="14" fill="var(--surface-primary)" stroke="var(--system-blue)" stroke-width="2.5"/>
+                      <circle cx="50" cy="50" r="5" fill="var(--system-blue)"/>
+                    </svg>
+                  </div>
+                  <div class="turbine-details">
+                    <span class="card-tag">当前调速目标</span>
+                    <div class="big-metric-row">
+                      <span class="big-number" id="dashFanTargetPct">--</span>
+                      <span class="big-unit">%</span>
+                    </div>
+                    <span class="sub-note" id="dashAverageRpm">平均 -- RPM</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Power Consumption Card (双电源与整机功耗) -->
+              <div class="apple-card stat-card power-card">
+                <div class="card-header">
+                  <span class="card-tag">整机能耗与供电 (Power)</span>
+                  <span class="badge badge-normal" id="powerStatusBadge" style="background:rgba(255, 149, 0, 0.12); color:var(--system-orange); border-color:rgba(255, 149, 0, 0.25);">⚡ 实时监测</span>
+                </div>
+                <div class="big-metric-row">
+                  <span class="big-number" id="dashTotalPower" style="color:var(--system-orange);">--</span>
+                  <span class="big-unit">瓦 (W)</span>
+                </div>
+                <div class="temp-sub-list">
+                  <div class="temp-sub-item" id="dashPs1Container">
+                    <span class="sub-name" id="dashPs1Label">PS1 电源</span>
+                    <span class="sub-val" id="dashPs1Val" style="font-weight:600;">-- W</span>
+                  </div>
+                  <div class="temp-sub-item" id="dashPs2Container">
+                    <span class="sub-name" id="dashPs2Label">PS2 电源</span>
+                    <span class="sub-val" id="dashPs2Val" style="font-weight:600;">-- W</span>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            <!-- Fan Array Cards (Fans 1 to 6) -->
+            <div class="section-heading-row">
+              <h2 class="section-title">风扇矩阵状态</h2>
+            </div>
+
+            <div class="fans-cards-grid" id="fansCardsContainer">
+              <!-- Dynamically populated fan cards -->
+            </div>
+
+            <!-- Global Control Card -->
+            <div class="apple-card global-control-card">
+              <div class="card-header">
+                <div>
+                  <h3 class="card-title">当前节点手动转速调控 (0% ~ 100%)</h3>
+                  <p class="card-desc">同步下发到此台服务器的所有风扇通道 (IPMI Raw: 0x30 0x30 0x02 0xff)</p>
+                </div>
+                <div class="control-actions">
+                  <button class="secondary-btn" id="btnRestoreDellAuto">恢复 Dell 原厂自动</button>
+                  <button class="primary-btn" id="btnApplyGlobalSpeed">应用调速</button>
+                </div>
+              </div>
+
+              <div class="slider-wrapper">
+                <span class="slider-val-badge" id="sliderSpeedValue">25%</span>
+                <input type="range" class="apple-slider" id="globalFanSlider" min="5" max="100" value="25" step="1">
+                <div class="slider-ticks">
+                  <span>5% 静音</span>
+                  <span>25% 日常</span>
+                  <span>50% 均衡</span>
+                  <span>75% 高载</span>
+                  <span>100% 满负荷</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Integrated Full Sensor Telemetry Table for Focused Node -->
+            <div class="apple-card table-card" style="margin-top:20px;">
+              <div class="hero-header-row" style="margin-bottom:12px;">
+                <div>
+                  <h3 class="card-title" style="margin-bottom:2px;">全量 IPMI 传感遥测明细</h3>
+                  <p class="card-desc">查看此节点全部传感器实时读数（核心温度、转速、电压与功耗状态）</p>
+                </div>
+                <div class="search-filter-row">
+                  <div class="apple-search-box" style="width:200px;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="11" cy="11" r="8"/>
+                      <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                    </svg>
+                    <input type="text" id="sensorSearchInput" placeholder="过滤传感器...">
+                  </div>
+                  <div class="category-tabs" id="sensorCategoryTabs">
+                    <button class="cat-btn active" data-cat="all">全部</button>
+                    <button class="cat-btn" data-cat="temp">温度</button>
+                    <button class="cat-btn" data-cat="rpm">转速</button>
+                    <button class="cat-btn" data-cat="power">电气</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="apple-table-scroll-wrapper" style="width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch;">
+                <table class="apple-table" id="sensorTable" style="min-width:620px;">
+                  <thead>
+                    <tr>
+                      <th style="min-width:180px;">监控指标 / 传感器</th>
+                      <th style="min-width:100px;">实时读数</th>
+                      <th style="min-width:80px;">单位</th>
+                      <th style="min-width:90px;">健康状态</th>
+                      <th style="min-width:170px;">安全参考阈值</th>
+                    </tr>
+                  </thead>
+                  <tbody id="sensorTableBody">
+                    <!-- Populated dynamically -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+          </div>
+
+        </section>
+
+
+        <!-- ==================== TAB 2: MULTI-NODE DYNAMIC CURVE ==================== -->
+        <section class="tab-pane" id="pane-curve">
+          <div class="hero-header-row">
+            <div>
+              <h1 class="page-title">多节点自定义温控曲线</h1>
+              <p class="page-desc">自由添加/删除温控节点，为每个温度触发点单独设置对应风扇转速与安全保护</p>
+            </div>
+            <div class="control-actions">
+              <button class="secondary-btn" id="btnResetDefaultCurve">恢复推荐曲线</button>
+              <button class="primary-btn" id="btnAddCurveNode">+ 新增温控节点</button>
+              <button class="primary-btn" id="btnSaveCurveNodes">保存并生效方案</button>
+            </div>
+          </div>
+
+          <!-- Curve Canvas & Visualization -->
+          <div class="apple-card curve-graph-card">
+            <div class="card-header">
+              <span class="card-tag">多节点拟合特性图谱</span>
+              <div class="legend-row">
+                <span class="legend-item"><span class="legend-dot green"></span>当前工况坐标</span>
+                <span class="legend-item"><span class="legend-dot blue"></span>拟合曲线/节点</span>
+                <span class="legend-item"><span class="legend-dot red"></span>极限安全熔断</span>
+              </div>
+            </div>
+            
+            <div class="curve-canvas-container">
+              <svg class="curve-svg" id="curveSvg" viewBox="0 0 700 240">
+                <!-- Multi-node curve rendered dynamically -->
+              </svg>
+            </div>
+          </div>
+
+          <!-- Dynamic Nodes List -->
+          <div class="nodes-container">
+            <div class="section-heading-row">
+              <h2 class="section-title">温控触发节点配置列表 (<span id="nodesCountBadge">6</span>个节点)</h2>
+              <span style="font-size:12px; color:var(--text-tertiary);">按温度由低至高自动排序插值</span>
+            </div>
+            <div class="curve-nodes-grid" id="curveNodesListContainer">
+              <!-- Dynamically populated node cards -->
+            </div>
+          </div>
+        </section>
+
+
+        <!-- ==================== TAB 3: MANUAL SPEED CONTROL ==================== -->
+        <section class="tab-pane" id="pane-fans">
+          <div class="hero-header-row" style="align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+            <div>
+              <h1 class="page-title">手动调速策略</h1>
+              <p class="page-desc">灵活设定全局统一转速或 6 通道独立风道，保存后自动同步至所有处于「手动调速」模式的服务器</p>
+            </div>
+            <div style="display:flex; align-items:center; gap:12px;">
+              <!-- 全局调速 与 独立调速 左右胶囊切换 -->
+              <div class="apple-segmented-control layout-switch-capsule" id="manualModeSegment" style="padding:2px; border-radius:9999px;">
+                <button class="seg-btn active" data-manual-type="global" style="padding:4px 14px; font-size:12px; border-radius:9999px;">
+                  <span>🌐 全局调速</span>
+                </button>
+                <button class="seg-btn" data-manual-type="individual" style="padding:4px 14px; font-size:12px; border-radius:9999px;">
+                  <span>🎛️ 独立调速</span>
+                </button>
+              </div>
+
+              <!-- 全通道同步改为保存，保存后同步策略 -->
+              <button class="primary-btn" id="btnSaveManualStrategy" style="padding:5px 16px; font-size:12.5px; border-radius:9999px; display:flex; align-items:center; gap:5px;">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                  <polyline points="17 21 17 13 7 13 7 21"/>
+                  <polyline points="7 3 7 8 15 8"/>
+                </svg>
+                <span>保存策略并同步</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Section 1: 全局调速板块 (Global Speed Block) -->
+          <div id="manualGlobalSection" class="apple-card" style="margin-bottom: 24px; padding: 22px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+              <div>
+                <h3 style="font-size:15px; font-weight:600; margin-bottom:4px; display:flex; align-items:center; gap:8px;">
+                  <span>全局风扇基准转速</span>
+                  <span class="badge badge-accent">全机箱风道统一调速</span>
+                </h3>
+                <p style="font-size:12px; color:var(--text-secondary); margin:0;">拉动滑动条设定全局转速，轻点「保存策略并同步」即可下发至所有手动模式服务器 (PWM 5% ~ 100%)</p>
+              </div>
+              <div style="text-align:right;">
+                <span id="tabGlobalFanValBadge" style="font-size:24px; font-weight:700; color:var(--system-blue);">25%</span>
+                <span id="tabGlobalFanRpmEst" style="font-size:11px; color:var(--text-tertiary); display:block;">约 4,200 RPM</span>
+              </div>
+            </div>
+
+            <!-- Global Slider -->
+            <div style="display:flex; align-items:center; gap:16px; margin-bottom:18px;">
+              <input type="range" class="apple-slider" id="tabGlobalFanSlider" min="5" max="100" value="25" style="flex:1;">
+            </div>
+
+            <!-- Quick Speed Pill Buttons -->
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+              <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                <span style="font-size:11px; color:var(--text-tertiary); margin-right:4px;">快捷档位:</span>
+                <button class="filter-pill" onclick="setTabGlobalSpeed(15)">15% 极静音</button>
+                <button class="filter-pill" onclick="setTabGlobalSpeed(25)">25% 轻载基准</button>
+                <button class="filter-pill" onclick="setTabGlobalSpeed(35)">35% 中载巡航</button>
+                <button class="filter-pill" onclick="setTabGlobalSpeed(50)">50% 强化散热</button>
+                <button class="filter-pill" onclick="setTabGlobalSpeed(75)">75% 高负载</button>
+                <button class="filter-pill" onclick="setTabGlobalSpeed(100)">100% 全速满转</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section 2: 独立调速板块 (Individual 6-Channel Grid) -->
+          <div id="manualIndividualSection" style="display:none;">
+            <div class="section-heading-row" style="margin-top:0; margin-bottom:10px;">
+              <div>
+                <h2 class="section-title">6 通道独立风扇精调 (针对双路不对称风道微调)</h2>
+                <span style="font-size:12px; color:var(--text-tertiary);">可单独拉动某风道加大风量，点击右上角「保存策略并同步」批量写入</span>
+              </div>
+            </div>
+
+            <div class="fan-channels-grid" id="fanChannelsGrid">
+              <!-- 6 Fan Channels rendered by JS -->
+            </div>
+          </div>
+        </section>
+
+
+        <!-- ==================== TAB 4: PRESETS ==================== -->
+        <section class="tab-pane" id="pane-presets">
+          <div class="hero-header-row">
+            <div>
+              <h1 class="page-title">经典情景散热预设</h1>
+              <p class="page-desc">精选自原版两款工具经过实测验证的最佳风道转速配比方案</p>
+            </div>
+          </div>
+
+          <div class="presets-grid" id="presetsGrid">
+            <!-- Presets cards rendered by JS -->
+          </div>
+        </section>
+
+
+        <!-- ==================== TAB 5: CLUSTER MANAGEMENT ==================== -->
+        <section class="tab-pane" id="pane-servers">
+          <div class="hero-header-row" style="justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+            <div>
+              <h1 class="page-title">集群管理</h1>
+              <p class="page-desc">分别管理物理底层【硬件节点 (IPMI)】与系统层【系统服务器 (SSH)】，并支持灵活绑定与统筹遍历</p>
+            </div>
+            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+              <!-- Unified Search & Filter for both Nodes and Servers -->
+              <div style="position:relative; display:flex; align-items:center;">
+                <input type="text" id="clusterSearchInput" class="apple-input" placeholder="🔍 搜索节点 / 服务器 / IP / SN / 系统..." style="width:230px; padding:4px 10px; font-size:12px; border-radius:8px;">
+              </div>
+              <!-- Unified Layout Switcher (Grid / Row) 左右滑动胶囊 -->
+              <div class="apple-segmented-control layout-switch-capsule" id="clusterLayoutSwitch" style="padding:2px; border-radius:9999px;">
+                <button class="seg-btn active" data-view="grid" title="网格卡片视图" style="padding:3px 11px; font-size:11.5px; border-radius:9999px;">
+                  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="3" width="7" height="7"/>
+                    <rect x="14" y="3" width="7" height="7"/>
+                    <rect x="14" y="14" width="7" height="7"/>
+                    <rect x="3" y="14" width="7" height="7"/>
+                  </svg>
+                  <span>网格</span>
+                </button>
+                <button class="seg-btn" data-view="row" title="条形紧凑视图" style="padding:3px 11px; font-size:11.5px; border-radius:9999px;">
+                  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="3" y1="6" x2="21" y2="6"/>
+                    <line x1="3" y1="12" x2="21" y2="12"/>
+                    <line x1="3" y1="18" x2="21" y2="18"/>
+                  </svg>
+                  <span>条形</span>
+                </button>
+              </div>
+              <!-- 在线测活与强制刷新按钮组 -->
+              <button class="secondary-btn" id="btnClusterPingAll" style="display:inline-flex; align-items:center; gap:5px; font-size:11.5px; padding:4px 9px;" title="向所有硬件节点 (IPMI 623) 和系统服务器 (SSH 22) 发送轻量握手，快速测活刷新在线状态">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                </svg>
+                <span>在线测活</span>
+              </button>
+
+              <button class="secondary-btn" id="btnClusterForceRefreshAll" style="display:inline-flex; align-items:center; gap:5px; font-size:11.5px; padding:4px 9px;" title="强制重新连接并深度重读所有服务器的品牌、型号、出厂SN序列号与系统版本，完全覆盖旧配置数据">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="23 4 23 10 17 10"/>
+                  <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                </svg>
+                <span>强制刷新</span>
+              </button>
+
+              <button class="secondary-btn" id="btnOpenAddSystemServerModal">+ 添加系统服务器</button>
+              <button class="primary-btn" id="btnOpenAddServerModal">+ 添加硬件节点</button>
+            </div>
+          </div>
+
+          <!-- Section 1: 硬件节点列表 -->
+          <div style="margin-bottom:20px;">
+            <div class="section-heading-row">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <h3 style="font-size:14.5px; font-weight:600; margin:0;">🖥️ 硬件节点列表 (IPMI / BMC 带外)</h3>
+                <span class="badge badge-normal" id="clusterHardwareNodesCountBadge">0 个节点</span>
+              </div>
+            </div>
+            <div class="servers-management-grid" id="serversManagementContainer">
+              <!-- Dynamically populated node items -->
+            </div>
+          </div>
+
+          <!-- Section 2: 系统服务器列表 -->
+          <div style="margin-bottom:20px;">
+            <div class="section-heading-row">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <h3 style="font-size:14.5px; font-weight:600; margin:0;">🐧 系统服务器列表 (SSH 探针 / 宿主与虚拟机)</h3>
+                <span class="badge badge-cool" id="sysServersCountBadge">0 个服务器</span>
+              </div>
+            </div>
+            <div class="servers-management-grid" id="systemServersManagementContainer">
+              <!-- Dynamically populated system server items -->
+            </div>
+          </div>
+        </section>
+
+
+        <!-- ==================== TAB 6: ALERTS ==================== -->
+        <section class="tab-pane" id="pane-alerts">
+          <div class="hero-header-row">
+            <div>
+              <h1 class="page-title">智能告警中心</h1>
+              <p class="page-desc">物理服务器核心温度与内部子系统 CPU、内存、Swap、磁盘超标自动报警</p>
+            </div>
+            <div style="display:flex; gap:10px;">
+              <button class="secondary-btn" id="btnTestAlertAudio" style="display:flex; align-items:center; gap:6px;">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                  <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/>
+                </svg>
+                <span>试听告警声</span>
+              </button>
+              <button class="secondary-btn" id="btnTestAlertTTS" style="display:flex; align-items:center; gap:6px;">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                  <line x1="12" y1="19" x2="12" y2="23"/>
+                  <line x1="8" y1="23" x2="16" y2="23"/>
+                </svg>
+                <span>测试语音播报</span>
+              </button>
+              <button class="primary-btn" id="btnSaveAlertConfig">保存告警规则</button>
+            </div>
+          </div>
+
+          <div class="settings-sections-wrapper">
+            <!-- Global Alert Switch & Dispatch Methods -->
+            <div class="apple-card form-card max-w-card" style="margin-bottom: 20px;">
+              <h3 class="section-subtitle">告警响应方式与通道</h3>
+
+              <div class="form-row-between">
+                <div>
+                  <div class="setting-title">总告警监控开关</div>
+                  <div class="setting-desc">开启后，后台守护线程将自动按阈值实时扫描全部节点与子系统</div>
+                </div>
+                <label class="apple-switch">
+                  <input type="checkbox" id="alertGlobalEnabled" checked>
+                  <span class="switch-slider"></span>
+                </label>
+              </div>
+
+              <div class="form-row-between">
+                <div>
+                  <div class="setting-title">声音/音乐警报</div>
+                  <div class="setting-desc">超标时播放警报音频（内置高音警示或指定自定义 WAV 音乐）</div>
+                </div>
+                <label class="apple-switch">
+                  <input type="checkbox" id="alertSoundEnabled" checked>
+                  <span class="switch-slider"></span>
+                </label>
+              </div>
+
+              <div class="form-row-between" id="rowAlertSoundType">
+                <div>
+                  <div class="setting-title">警报声音类型</div>
+                  <div class="setting-desc">选择系统内置默认警笛或导入自定义音频文件路径</div>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <select class="apple-select" id="alertSoundType" style="width:160px;">
+                    <option value="default">系统默认警报音 (Alarm)</option>
+                    <option value="custom">自定义本地 WAV 音频</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-row-between" id="rowCustomSoundPath" style="display:none;">
+                <div style="flex:1; margin-right:16px;">
+                  <div class="setting-title">自定义 WAV 音频路径</div>
+                  <div class="setting-desc">支持输入本地 .wav 完整绝对路径（如 C:\Music\alarm.wav）</div>
+                  <input type="text" class="apple-input" id="alertCustomSoundPath" placeholder="C:\path\to\alert.wav" style="margin-top:6px; width:100%;">
+                </div>
+              </div>
+
+              <div class="form-row-between">
+                <div>
+                  <div class="setting-title">文本朗读语音播报 (TTS)</div>
+                  <div class="setting-desc">触发告警时使用系统语音引擎清晰朗读具体的告警内容（如：“警告！CPU 温度过高已达 85度”）</div>
+                </div>
+                <label class="apple-switch">
+                  <input type="checkbox" id="alertTtsEnabled" checked>
+                  <span class="switch-slider"></span>
+                </label>
+              </div>
+
+              <div class="form-row-between">
+                <div>
+                  <div class="setting-title">同一事件告警冷却防刷屏 (秒)</div>
+                  <div class="setting-desc">同一台服务器在持续超标时，两次声音/语音/推送警报之间的静默间隔</div>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <input type="number" class="apple-input" id="alertCooldownSec" min="10" max="600" value="60" style="width:90px;">
+                  <span style="font-size:12px; color:var(--text-tertiary);">秒 (建议 60s)</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 板块 0: 外部信息通知推送与自定义告警内容 (移植借鉴自 GitHub: Apprise & ANotify) -->
+            <div class="apple-card form-card max-w-card" style="margin-bottom: 20px;">
+              <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span style="font-size:18px;">📢</span>
+                  <div>
+                    <h3 class="section-subtitle" style="margin-bottom:2px;">外部信息通知模块 (Webhook / 推送服务)</h3>
+                    <p style="font-size:12px; color:var(--text-tertiary); margin:0;">
+                      技术移植自 GitHub 开源项目: <strong style="color:var(--system-blue);">caronc/apprise</strong> (通用通知中枢) 与 <strong style="color:var(--system-blue);">TommyMerlin/ANotify</strong> (多平台聚合通知)
+                    </p>
+                  </div>
+                </div>
+                <button type="button" class="secondary-btn" id="btnTestWebhookNotify" style="font-size:11.5px; padding:3px 10px; border-radius:9999px;">
+                  <span>🔔 测试发送通知</span>
+                </button>
+              </div>
+
+              <!-- Webhook 总开关 -->
+              <div class="form-row-between">
+                <div>
+                  <div class="setting-title">启用外部消息推送</div>
+                  <div class="setting-desc">当硬件节点或服务器发生异常超标时，自动下发消息至手机或群聊群组</div>
+                </div>
+                <label class="apple-switch">
+                  <input type="checkbox" id="alertWebhookEnabled">
+                  <span class="switch-slider"></span>
+                </label>
+              </div>
+
+              <!-- 通道选择器 -->
+              <div class="form-row-between">
+                <div>
+                  <div class="setting-title">通知服务通道</div>
+                  <div class="setting-desc">支持国内常用的 Server酱、企业微信、钉钉、飞书、Bark、PushPlus 及标准 Webhook</div>
+                </div>
+                <select class="apple-select" id="alertWebhookChannel" style="width:200px;">
+                  <option value="custom_webhook">通用 Webhook (HTTP POST)</option>
+                  <option value="serverchan">Server酱 (微信通知 / 方糖)</option>
+                  <option value="dingtalk">钉钉群机器人 (DingTalk Bot)</option>
+                  <option value="feishu">飞书群机器人 (Lark / Feishu)</option>
+                  <option value="wechat_work">企业微信群机器人 (WeCom)</option>
+                  <option value="bark">Bark (iOS 极简实时推送)</option>
+                  <option value="pushplus">PushPlus (微信消息推送加)</option>
+                </select>
+              </div>
+
+              <!-- Webhook URL / Endpoint -->
+              <div class="form-row-between" style="align-items:flex-start;">
+                <div style="flex:1; margin-right:16px;">
+                  <div class="setting-title">Webhook 地址 / 接口 URL</div>
+                  <div class="setting-desc" id="alertWebhookUrlDesc">完整 HTTP/HTTPS 请求地址 (如 https://oapi.dingtalk.com/robot/send?access_token=...)</div>
+                  <input type="text" class="apple-input" id="alertWebhookUrl" placeholder="https://..." style="margin-top:6px; width:100%;">
+                </div>
+              </div>
+
+              <!-- Webhook Secret / SendKey -->
+              <div class="form-row-between" style="align-items:flex-start;">
+                <div style="flex:1; margin-right:16px;">
+                  <div class="setting-title">通知密钥 / Token / SendKey (选填)</div>
+                  <div class="setting-desc">针对 Server酱 SendKey、PushPlus Token、加签密钥或安全令牌</div>
+                  <input type="password" class="apple-input" id="alertWebhookSecret" placeholder="如: SCT123456... 或加签 Secret" style="margin-top:6px; width:100%;">
+                </div>
+              </div>
+
+              <!-- 自定义告警内容与模版配置 -->
+              <div style="margin-top:14px; padding-top:14px; border-top:1px dashed var(--border-subtle);">
+                <div class="setting-title" style="margin-bottom:4px;">自定义告警标题模版</div>
+                <div class="setting-desc" style="margin-bottom:6px;">可用占位符: <code style="color:var(--system-blue);">{level_text}</code>(紧急/警告), <code style="color:var(--system-blue);">{source}</code>(节点名), <code style="color:var(--system-blue);">{rule_title}</code>(规则名)</div>
+                <input type="text" class="apple-input" id="alertTitleTemplate" value="【{level_text}】{source} 触发告警" style="width:100%; margin-bottom:12px;">
+
+                <div class="setting-title" style="margin-bottom:4px;">自定义告警内容模版 (Body)</div>
+                <div class="setting-desc" style="margin-bottom:6px;">
+                  可用占位符: <code style="color:var(--system-blue);">{current_val}</code>(当前读数), <code style="color:var(--system-blue);">{threshold_val}</code>(设定阈值), <code style="color:var(--system-blue);">{detail_msg}</code>(详细说明), <code style="color:var(--system-blue);">{alert_time}</code>(时间)
+                </div>
+                <textarea class="apple-input" id="alertBodyTemplate" rows="4" style="width:100%; font-family:var(--font-mono); font-size:12px; line-height:1.5; resize:vertical;">告警项目: {rule_title}
+告警源: {source}
+当前数值: {current_val}
+设定阈值: {threshold_val}
+详情说明: {detail_msg}
+发生时间: {alert_time}</textarea>
+              </div>
+            </div>
+
+            <!-- 板块 1: 节点物理机告警 (IPMI 带外) -->
+            <div class="apple-card form-card max-w-card" style="margin-bottom: 20px;">
+              <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+                <span style="font-size:16px;">🖥️</span>
+                <div>
+                  <h3 class="section-subtitle" style="margin-bottom:2px;">节点物理机告警</h3>
+                  <p style="font-size:12px; color:var(--text-tertiary); margin:0;">针对 BMC/iDRAC 物理底层传感器温度指标进行安全防护</p>
+                </div>
+              </div>
+
+              <!-- Rule: Node CPU Temp -->
+              <div class="form-row-between">
+                <div>
+                  <div class="setting-title">物理 CPU 核心温度过高告警</div>
+                  <div class="setting-desc">通过 IPMI 硬件级直接读取的 CPU 最高核心温度触发阈值</div>
+                </div>
+                <div style="display:flex; align-items:center; gap:12px;">
+                  <div style="display:flex; align-items:center; gap:6px;">
+                    <span style="font-size:12px; color:var(--text-secondary);">≥</span>
+                    <input type="number" class="apple-input" id="threshNodeCpuTemp" min="40" max="95" value="80" style="width:75px;">
+                    <span style="font-size:12px; color:var(--text-secondary);">°C</span>
+                  </div>
+                  <label class="apple-switch">
+                    <input type="checkbox" id="enableNodeCpuTemp" checked>
+                    <span class="switch-slider"></span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <!-- 板块 2: 服务器告警（SSH） (SSH 探针) -->
+            <div class="apple-card form-card max-w-card" style="margin-bottom: 20px;">
+              <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+                <span style="font-size:16px;">🐧</span>
+                <div>
+                  <h3 class="section-subtitle" style="margin-bottom:2px;">服务器告警（SSH）</h3>
+                  <p style="font-size:12px; color:var(--text-tertiary); margin:0;">针对绑定或独立运行的 Linux 系统服务器 CPU、内存、Swap 与磁盘进行资源耗尽预警</p>
+                </div>
+              </div>
+
+              <!-- Rule 1: Server CPU % -->
+              <div class="form-row-between">
+                <div>
+                  <div class="setting-title">系统服务器 CPU 使用率告警</div>
+                  <div class="setting-desc">监控 Linux 服务器内部计算进程算力占用百分比</div>
+                </div>
+                <div style="display:flex; align-items:center; gap:12px;">
+                  <div style="display:flex; align-items:center; gap:6px;">
+                    <span style="font-size:12px; color:var(--text-secondary);">≥</span>
+                    <input type="number" class="apple-input" id="threshServerCpu" min="10" max="100" value="90" style="width:75px;">
+                    <span style="font-size:12px; color:var(--text-secondary);">%</span>
+                  </div>
+                  <label class="apple-switch">
+                    <input type="checkbox" id="enableServerCpu" checked>
+                    <span class="switch-slider"></span>
+                  </label>
+                </div>
+              </div>
+
+              <!-- Rule 2: Server Memory % -->
+              <div class="form-row-between">
+                <div>
+                  <div class="setting-title">系统服务器 物理内存占用告警</div>
+                  <div class="setting-desc">监控 RAM 物理内存使用百分比，防止 OOM 杀进程崩溃</div>
+                </div>
+                <div style="display:flex; align-items:center; gap:12px;">
+                  <div style="display:flex; align-items:center; gap:6px;">
+                    <span style="font-size:12px; color:var(--text-secondary);">≥</span>
+                    <input type="number" class="apple-input" id="threshServerMem" min="10" max="100" value="90" style="width:75px;">
+                    <span style="font-size:12px; color:var(--text-secondary);">%</span>
+                  </div>
+                  <label class="apple-switch">
+                    <input type="checkbox" id="enableServerMem" checked>
+                    <span class="switch-slider"></span>
+                  </label>
+                </div>
+              </div>
+
+              <!-- Rule 3: Server Swap % -->
+              <div class="form-row-between">
+                <div>
+                  <div class="setting-title">系统服务器 Swap 剧烈换页告警</div>
+                  <div class="setting-desc">交换空间占用过高意味着物理内存严重不足，可能导致主机假死</div>
+                </div>
+                <div style="display:flex; align-items:center; gap:12px;">
+                  <div style="display:flex; align-items:center; gap:6px;">
+                    <span style="font-size:12px; color:var(--text-secondary);">≥</span>
+                    <input type="number" class="apple-input" id="threshServerSwap" min="10" max="100" value="80" style="width:75px;">
+                    <span style="font-size:12px; color:var(--text-secondary);">%</span>
+                  </div>
+                  <label class="apple-switch">
+                    <input type="checkbox" id="enableServerSwap" checked>
+                    <span class="switch-slider"></span>
+                  </label>
+                </div>
+              </div>
+
+              <!-- Rule 4: Server Root Disk % -->
+              <div class="form-row-between">
+                <div>
+                  <div class="setting-title">系统服务器 根分区磁盘耗尽告警</div>
+                  <div class="setting-desc">根分区 (/) 存储剩余不足时发出急救警报</div>
+                </div>
+                <div style="display:flex; align-items:center; gap:12px;">
+                  <div style="display:flex; align-items:center; gap:6px;">
+                    <span style="font-size:12px; color:var(--text-secondary);">≥</span>
+                    <input type="number" class="apple-input" id="threshServerDisk" min="10" max="100" value="92" style="width:75px;">
+                    <span style="font-size:12px; color:var(--text-secondary);">%</span>
+                  </div>
+                  <label class="apple-switch">
+                    <input type="checkbox" id="enableServerDisk" checked>
+                    <span class="switch-slider"></span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <!-- Alert Event Log Table -->
+            <div class="apple-card form-card max-w-card">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+                <h3 class="section-subtitle" style="margin-bottom:0;">告警事件流水日志</h3>
+                <button class="secondary-btn" id="btnClearAlertHistory" style="font-size:12px; padding:4px 10px;">清空历史日志</button>
+              </div>
+
+              <div class="sensor-table-container" style="max-height:280px; overflow-y:auto;">
+                <table class="apple-table" style="width:100%;">
+                  <thead>
+                    <tr>
+                      <th style="width:80px;">时间</th>
+                      <th style="width:120px;">告警源</th>
+                      <th style="width:160px;">类型</th>
+                      <th>告警详情</th>
+                      <th style="width:80px;">级别</th>
+                    </tr>
+                  </thead>
+                  <tbody id="alertHistoryTableBody">
+                    <tr>
+                      <td colspan="5" style="text-align:center; padding:24px; color:var(--text-tertiary);">暂无告警记录，系统运行平稳健康</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
+
+        <!-- ==================== TAB 6.5: BATCH OPS PLATFORM ==================== -->
+        <section class="tab-pane" id="pane-ops">
+          <div class="hero-header-row" style="margin-bottom: 12px; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+            <div>
+              <div style="display:flex; align-items:center; gap:10px;">
+                <h1 class="page-title" style="font-size:18px; margin:0;">批量运维平台</h1>
+                <span class="badge badge-cool">SSH 统一命令下发与编排</span>
+              </div>
+              <p class="page-desc" style="font-size:12px; margin-top:2px; margin-bottom:0;">
+                基于已配置的 SSH 认证通道，向物理 IPMI 宿主与独立服务器集群并行分发运维与巡检指令
+              </p>
+            </div>
+            <div style="display:flex; align-items:center; gap:10px;">
+              <span class="badge badge-normal" id="opsTargetCountBadge">已选 0 台服务器</span>
+              <button class="primary-btn" id="btnOpsExecuteNow" style="padding:5px 14px; font-size:12px;">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:4px;">
+                  <polygon points="5 3 19 12 5 21 5 3"/>
+                </svg>
+                <span>立即批量执行</span>
+              </button>
+            </div>
+          </div>
+
+          <div style="display:grid; grid-template-columns: 320px 1fr; gap:14px; min-height:560px;">
+            <!-- Left Column: Search & Hierarchical Node-Server Selector -->
+            <div class="apple-card" style="display:flex; flex-direction:column; padding:14px; background:var(--surface-primary); border-radius:12px; border:1px solid var(--border-subtle); overflow:hidden;">
+              <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+                <span style="font-size:13px; font-weight:600; color:var(--text-primary);">目标服务器选择</span>
+                <div style="display:flex; gap:6px;">
+                  <button class="secondary-btn" id="btnOpsSelectAll" style="font-size:10.5px; padding:2px 8px;">全选</button>
+                  <button class="secondary-btn" id="btnOpsSelectNone" style="font-size:10.5px; padding:2px 8px;">清空</button>
+                </div>
+              </div>
+
+              <!-- Search Bar -->
+              <div style="position:relative; margin-bottom:10px;">
+                <input type="text" class="apple-input" id="opsServerSearchInput" placeholder="搜索服务器名 / IP / 宿主..." style="font-size:11.5px; padding:5px 10px 5px 28px; width:100%; box-sizing:border-box;">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" style="position:absolute; left:9px; top:8px; color:var(--text-tertiary);">
+                  <circle cx="11" cy="11" r="8"/>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+              </div>
+
+              <!-- Hierarchical Tree: [Node ➔ Bound Servers] + [Standalone Servers] -->
+              <div id="opsServerHierarchyTree" style="flex:1; overflow-y:auto; padding-right:2px; display:flex; flex-direction:column; gap:8px;">
+                <!-- Populated via renderOpsServerTree() -->
+              </div>
+            </div>
+
+            <!-- Right Column: Command Composer, Quick Presets & Terminal Execution Logs -->
+            <div style="display:flex; flex-direction:column; gap:12px; min-width:0;">
+              <!-- Command Input & Presets -->
+              <div class="apple-card" style="padding:14px; background:var(--surface-primary); border-radius:12px; border:1px solid var(--border-subtle);">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+                  <span style="font-size:12.5px; font-weight:600; color:var(--text-primary);">Shell 待执行命令</span>
+                  <!-- Presets -->
+                  <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                    <span style="font-size:10.5px; color:var(--text-tertiary);">快捷巡检指令:</span>
+                    <button class="secondary-btn ops-preset-cmd" data-cmd="uptime && free -h" style="font-size:10px; padding:1px 6px;">运行与内存</button>
+                    <button class="secondary-btn ops-preset-cmd" data-cmd="df -h / /var /data" style="font-size:10px; padding:1px 6px;">磁盘容量</button>
+                    <button class="secondary-btn ops-preset-cmd" data-cmd="uname -a && cat /etc/os-release | grep PRETTY_NAME" style="font-size:10px; padding:1px 6px;">系统与内核</button>
+                    <button class="secondary-btn ops-preset-cmd" data-cmd="top -bn1 | head -n 15" style="font-size:10px; padding:1px 6px;">进程快照</button>
+                    <button class="secondary-btn ops-preset-cmd" data-cmd="systemctl list-units --type=service --state=running | head -n 12" style="font-size:10px; padding:1px 6px;">活跃服务</button>
+                  </div>
+                </div>
+
+                <div style="position:relative;">
+                  <textarea id="opsCommandInput" rows="3" class="apple-input" style="width:100%; font-family:var(--font-mono); font-size:12.5px; padding:8px 10px; resize:vertical; box-sizing:border-box; line-height:1.4;" placeholder="输入要在所选服务器执行的 Bash/Shell 命令，例如: uptime; df -h; free -m"></textarea>
+                </div>
+              </div>
+
+              <!-- Terminal Execution Result Deck -->
+              <div class="apple-card" style="flex:1; display:flex; flex-direction:column; padding:14px; background:var(--surface-primary); border-radius:12px; border:1px solid var(--border-subtle); overflow:hidden; min-height:360px;">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="font-size:13px; font-weight:600; color:var(--text-primary);">执行响应控制台</span>
+                    <span class="badge badge-normal" id="opsExecutionSummaryBadge">等待下发</span>
+                  </div>
+                  <div style="display:flex; gap:6px;">
+                    <button class="secondary-btn" id="btnOpsClearOutputs" style="font-size:10.5px; padding:2px 8px;">清空终端</button>
+                    <button class="secondary-btn" id="btnOpsCopyOutputs" style="font-size:10.5px; padding:2px 8px;">复制全部回显</button>
+                  </div>
+                </div>
+
+                <!-- Scrollable Output Container -->
+                <div id="opsOutputDeck" style="flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:10px; background:#0d1117; border-radius:8px; padding:12px; font-family:var(--font-mono); font-size:11.5px; color:#c9d1d9; border:1px solid #30363d; min-height:280px;">
+                  <div style="color:#8b949e; text-align:center; padding:50px 0;">
+                    左侧勾选目标服务器，输入命令并点击「立即批量执行」，此处将多端并发回显执行结果。
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+
+        <!-- ==================== TAB: SYSTEM LOGS ==================== -->
+        <section class="tab-pane" id="pane-logs">
+          <div class="hero-header-row" style="justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:14px;">
+            <div>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <h1 class="page-title" style="margin:0;">系统运行日志</h1>
+                <span class="badge badge-normal" id="logModeBadge" style="font-size:11px; padding:2px 8px;">标准模式 (仅实时报错)</span>
+              </div>
+              <p class="page-desc" style="margin-top:4px;">默认仅展示实时异常与警告报错信息；开启「调试模式」可抓取底层详细交互全量报文</p>
+            </div>
+            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+              <!-- 调试模式开关切换 -->
+              <label class="apple-switch-label" style="display:inline-flex; align-items:center; gap:8px; cursor:pointer; background:var(--surface-secondary); padding:4px 10px; border-radius:9999px; border:1px solid var(--border-subtle);" title="开启调试模式后，日志面板将实时显示包括 INFO/DEBUG 在内的所有系统日志">
+                <span style="font-size:12px; font-weight:600; color:var(--text-primary);">🐞 调试模式</span>
+                <label class="apple-switch" style="margin:0;">
+                  <input type="checkbox" id="btnToggleLogDebug">
+                  <span class="switch-slider"></span>
+                </label>
+              </label>
+
+              <!-- 清空日志 -->
+              <button class="secondary-btn" id="btnClearLogView" style="font-size:11.5px; padding:4px 10px; border-radius:9999px;">
+                <span>🗑️ 清空视图</span>
+              </button>
+
+              <!-- 刷新日志 -->
+              <button class="primary-btn" id="btnRefreshLogs" style="font-size:11.5px; padding:4px 12px; border-radius:9999px;">
+                <span>🔄 立即刷新</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- 日志终端式视窗面板 -->
+          <div class="apple-card" style="padding:14px 16px; border-radius:12px; display:flex; flex-direction:column; height:calc(100vh - 165px); min-height:450px; background:#0d1117; border:1px solid #30363d; box-shadow:0 8px 24px rgba(0,0,0,0.3);">
+            <div style="display:flex; justify-content:space-between; align-items:center; padding-bottom:10px; margin-bottom:10px; border-bottom:1px solid #21262d; font-size:11.5px; color:#8b949e;">
+              <div style="display:flex; align-items:center; gap:12px;">
+                <span>● 独立文件存储: <code style="color:#58a6ff;">logs/app_YYYYMMDD.log</code></span>
+                <span>● 当前过滤规则: <strong id="logFilterRuleText" style="color:#f0883e;">仅 ERROR / WARNING / 异常报错</strong></span>
+              </div>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span id="logTotalCountText">0 条记录</span>
+              </div>
+            </div>
+
+            <!-- 日志滚动容器 -->
+            <div id="systemLogStreamBox" style="flex:1; overflow-y:auto; font-family:var(--font-mono); font-size:11.5px; line-height:1.6; color:#c9d1d9; word-break:break-all; padding-right:6px;">
+              <div style="color:#8b949e; text-align:center; padding:60px 0;">
+                暂无错误异常日志。系统运行健康良好！
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== TAB 7: SETTINGS & PREFERENCES ==================== -->
+        <section class="tab-pane" id="pane-settings">
+          <div class="hero-header-row">
+            <div>
+              <h1 class="page-title">通用首选项</h1>
+              <p class="page-desc">配置首页刷新频率、Windows 登录自启动行为与全局运行参数</p>
+            </div>
+            <button class="primary-btn" id="btnSavePreferences">保存首选项</button>
+          </div>
+
+          <div class="settings-sections-wrapper">
+            
+            <!-- 1. 全局与前端渲染参数卡片 -->
+            <div class="apple-card form-card max-w-card" style="margin-bottom: 20px;">
+              <h3 class="section-subtitle">🖥️ 界面与前端渲染配置</h3>
+              
+              <div class="form-row-between">
+                <div>
+                  <div class="setting-title">界面 UI 画面刷新频率 (秒)</div>
+                  <div class="setting-desc">控制前端界面图表与数值的平滑重绘渲染周期（默认 1 秒，可调 1~10 秒，与后端采样独立解耦）</div>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <input type="number" class="apple-input" id="prefUiRefreshRate" min="1" max="10" value="1" style="width:70px; text-align:center;">
+                  <span style="font-size:12px; color:var(--text-secondary); font-weight:600;">秒 (s)</span>
+                </div>
+              </div>
+
+              <div class="form-row-between">
+                <div>
+                  <div class="setting-title">首页默认展示视图</div>
+                  <div class="setting-desc">打开软件时首页优先呈现全节点探针矩阵或单机深度详情</div>
+                </div>
+                <select class="apple-select" id="prefDefaultView">
+                  <option value="probe">探针矩阵平铺 (多台机器)</option>
+                  <option value="detail">节点聚焦详情 (单机旋钮)</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- 2. 硬件节点 (IPMI / iDRAC) 独立通信与测活参数卡片 -->
+            <div class="apple-card form-card max-w-card" style="margin-bottom: 20px;">
+              <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; border-bottom:1px solid var(--border-subtle); padding-bottom:8px;">
+                <h3 class="section-subtitle" style="margin:0; color:var(--accent-blue);">⚡ 硬件物理节点 (IPMI / iDRAC 带外) 参数</h3>
+                <span class="micro-capsule capsule-blue">UDP 623 端口</span>
+              </div>
+              
+              <!-- 节点连通性极速测活周期 (UDP 623 心跳探针) -->
+              <div class="form-row-between">
+                <div>
+                  <div class="setting-title">链路存活性极速测活周期 (秒) <span style="font-size:11px; color:var(--accent-blue); font-weight:600;">[在线心跳探测]</span></div>
+                  <div class="setting-desc">
+                    通过极速测活通道（UDP 623 端口底座探针，单次仅耗时 15~35ms）定时侦测硬件链路存活与网络延时。<br>
+                    <strong style="color:var(--text-secondary);">说明:</strong> 该周期仅用于刷新物理网络 RTT 延时与连通性判断；真正的温度/风扇数据由下方的「IPMI 核心数据采集」策略驱动。
+                  </div>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <input type="number" class="apple-input" id="prefNodePingInterval" min="2" max="60" value="10" style="width:70px; text-align:center;">
+                  <span style="font-size:12px; color:var(--text-secondary); font-weight:600;">秒 (s)</span>
+                </div>
+              </div>
+
+              <div class="form-row-between">
+                <div>
+                  <div class="setting-title">硬件节点测活防抖重试容错次数</div>
+                  <div class="setting-desc">轻量握手失败时的重试容错阈值（默认 2 次，防抖机制生效期间保持上一有效读数，超额后标记离线）</div>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <input type="number" class="apple-input" id="prefNodePingRetry" min="0" max="10" value="2" style="width:70px; text-align:center;">
+                  <span style="font-size:12px; color:var(--text-secondary); font-weight:600;">次</span>
+                </div>
+              </div>
+
+              <!-- 离线节点主动重连探针与停电恢复自愈配置 -->
+              <div class="form-row-between" style="background: rgba(0, 113, 227, 0.04); border-radius: 8px; padding: 10px 12px; border: 1px solid rgba(0, 113, 227, 0.12);">
+                <div>
+                  <div class="setting-title" style="display:flex; align-items:center; gap:6px;">
+                    <span>🔌 离线节点主动重连尝试 (停电恢复自愈)</span>
+                    <span class="micro-capsule capsule-blue" style="font-size:9px;">高可靠性自愈</span>
+                  </div>
+                  <div class="setting-desc" style="margin-top:3px;">
+                    <strong>应对断电/停电恢复场景：</strong>停电后通电，监控宿主机快速开机，而服务器 BMC / iDRAC 系统初始化较慢（通常需 2~4 分钟）。早期超时被标记离线后，系统将按设定间隔持续静默探测，<strong>一旦 BMC 启动完毕在线后立即终止高频重试，自动恢复常规测活与温控管理</strong>。
+                  </div>
+                </div>
+                <label class="apple-switch" style="margin-left: 16px;">
+                  <input type="checkbox" id="chkOfflineReconnect" checked>
+                  <span class="switch-slider"></span>
+                </label>
+              </div>
+
+              <div class="form-row-between" id="rowOfflineReconnectInterval">
+                <div>
+                  <div class="setting-title">离线节点重连尝试间隔 (秒)</div>
+                  <div class="setting-desc">当节点处于离线状态时，后台发送快速握手探针的重试频率（默认 15 秒，在线后自动退出重试恢复正常巡检）</div>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <input type="number" class="apple-input" id="prefOfflineReconnectInterval" min="5" max="300" value="15" style="width:70px; text-align:center;">
+                  <span style="font-size:12px; color:var(--text-secondary); font-weight:600;">秒 (s)</span>
+                </div>
+              </div>
+
+              <div class="form-row-between">
+                <div>
+                  <div class="setting-title">IPMI 核心数据精准采集模式</div>
+                  <div class="setting-desc">控制底层硬件节点实际向 BMC 发送网络采样请求的策略（精准采集 CPU 温度、风扇转速与功率）</div>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <select class="apple-select" id="prefIpmiPollMode" style="font-size:12px;">
+                    <option value="auto_1s">自动轮询 (上轮请求结束1秒后再次获取，最灵敏)</option>
+                    <option value="custom">自定义固定间隔 (按下方设定秒数定时轮询)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-row-between" id="rowCustomRefreshRate" style="display:none;">
+                <div>
+                  <div class="setting-title">精准核心采样自定义间隔 (秒)</div>
+                  <div class="setting-desc">当开启自定义固定间隔时生效，控制定向高速采集（CPU/风扇/功耗）的频率（推荐 1~5 秒）</div>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <input type="number" class="apple-input" id="prefRefreshRate" min="1" max="60" value="3" style="width:70px; text-align:center;">
+                  <span style="font-size:12px; color:var(--text-secondary); font-weight:600;">秒 (s)</span>
+                </div>
+              </div>
+
+              <div class="form-row-between">
+                <div>
+                  <div class="setting-title">全量传感器全局采集周期 (秒)</div>
+                  <div class="setting-desc">全量扫描 BMC 上百项传感器明细仓库的后台周期（推荐 30~120 秒，避免反复地毯式扫描压垮 BMC）</div>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <input type="number" class="apple-input" id="prefGlobalSensorRate" min="10" max="300" value="60" style="width:70px; text-align:center;">
+                  <span style="font-size:12px; color:var(--text-secondary); font-weight:600;">秒 (s)</span>
+                </div>
+              </div>
+
+              <div class="form-row-between">
+                <div>
+                  <div class="setting-title">IPMI 带外通信单次请求超时 (秒)</div>
+                  <div class="setting-desc">下发传感器读取与 IPMI raw 指令的等待超时时间，针对多传感器巡检推荐设为 15~30 秒</div>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <input type="number" class="apple-input" id="prefIpmiTimeout" min="5" max="120" value="30" style="width:70px; text-align:center;">
+                  <span style="font-size:12px; color:var(--text-secondary); font-weight:600;">秒 (s)</span>
+                </div>
+              </div>
+
+              <div class="form-row-between">
+                <div>
+                  <div class="setting-title">IPMI 带外超时重试次数</div>
+                  <div class="setting-desc">网络波动或 BMC 繁忙时自动重试的次数（推荐 1~3 次）</div>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <input type="number" class="apple-input" id="prefIpmiRetry" min="0" max="10" value="2" style="width:70px; text-align:center;">
+                  <span style="font-size:12px; color:var(--text-secondary); font-weight:600;">次</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 2.5 工业级 IPMI 极速优化引擎独立板块 (精炼浓缩 3 大核心维系维度) -->
+            <div class="apple-card form-card max-w-card" style="margin-bottom: 20px;">
+              <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; border-bottom:1px solid var(--border-subtle); padding-bottom:8px;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <h3 class="section-subtitle" style="margin:0; color:#30d158;">🚀 IPMI 硬件加速与延迟优化引擎</h3>
+                  <span class="micro-capsule capsule-green">工业级底层直连</span>
+                </div>
+                <div style="font-size:11px; color:var(--text-tertiary);">
+                  涵盖数据直读、本地缓存与长连接会话，各项协同生效且<strong>零冲突</strong>，默认全部开启
+                </div>
+              </div>
+
+              <!-- 维度一：数据直读与仓库缓存 -->
+              <div class="form-row-between">
+                <div style="flex:1; padding-right:16px;">
+                  <div class="setting-title" style="display:flex; align-items:center; gap:6px;">
+                    <span>⚡ 1. DCMI 单帧直读与 SDR 本地静态缓存加速</span>
+                    <span class="micro-capsule capsule-blue" style="font-size:9px;">耗时立降 80%</span>
+                  </div>
+                  <div class="setting-desc">
+                    <strong>机制:</strong> 绕过传统逐条遍历 80+ 传感器的缓慢流程，直接通过单帧 DCMI 毫秒直读 CPU/机箱温度，并自动复用本地 Dump 静态仓库元数据 (<code>-S</code>)。<br>
+                    <strong>收益:</strong> 遥测采集耗时由 2~3 秒骤降至 <strong>100~200ms</strong>，不给 BMC 造成额外负载。全量扫描时自动回退并自愈重放，绝对安全。
+                  </div>
+                </div>
+                <label class="apple-switch">
+                  <input type="checkbox" id="chkOptDcmiTemp" checked>
+                  <span class="switch-slider"></span>
+                </label>
+              </div>
+
+              <!-- 维度二：连接协商与快速重传 -->
+              <div class="form-row-between">
+                <div style="flex:1; padding-right:16px;">
+                  <div class="setting-title" style="display:flex; align-items:center; gap:6px;">
+                    <span>🔒 2. 固定标准加密套件 (-C 3) 与局域网快速重传 (-N 1)</span>
+                    <span class="micro-capsule capsule-blue" style="font-size:9px;">免 2 轮协商</span>
+                  </div>
+                  <div class="setting-desc">
+                    <strong>机制:</strong> 强制直连数据中心标准 Cipher 3 套件，省去与 BMC 逐一协商 16 种算法的延迟；同时将内网单包丢包等待微调为 1 秒。<br>
+                    <strong>收益:</strong> 单次握手直接省去 <strong>150~300ms</strong>；遇偶发网络抖动 1 秒内瞬间重发自愈，彻底告别原版傻等卡死。
+                  </div>
+                </div>
+                <label class="apple-switch">
+                  <input type="checkbox" id="chkOptCipherSuite" checked>
+                  <span class="switch-slider"></span>
+                </label>
+              </div>
+
+              <!-- 维度三：会话保持与定向分流 -->
+              <div class="form-row-between">
+                <div style="flex:1; padding-right:16px;">
+                  <div class="setting-title" style="display:flex; align-items:center; gap:6px;">
+                    <span>🔄 3. 保持会话管道 (Session Keep-Alive) 与传感器定向分流</span>
+                    <span class="micro-capsule capsule-green" style="font-size:9px;">极速 50~100ms</span>
+                  </div>
+                  <div class="setting-desc">
+                    <strong>机制:</strong> 启用单会话批处理管道与保活心跳，复用活跃 Session 管道连续轮询；温控巡检中聚焦提取温度与风扇核心要素。<br>
+                    <strong>收益:</strong> 免除每轮重新执行 RAKP 4 步建立会话与注销的物理开销，轮询交互延迟逼近 <strong>50~100ms</strong> 物理极限。
+                  </div>
+                </div>
+                <label class="apple-switch">
+                  <input type="checkbox" id="chkOptKeepaliveSession" checked>
+                  <span class="switch-slider"></span>
+                </label>
+              </div>
+            </div>
+
+            <!-- 3. 系统服务器 (SSH / Linux / PVE) 独立通信与测活参数卡片 -->
+            <div class="apple-card form-card max-w-card" style="margin-bottom: 20px;">
+              <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; border-bottom:1px solid var(--border-subtle); padding-bottom:8px;">
+                <h3 class="section-subtitle" style="margin:0; color:#0077b6;">🐧 系统服务器 (SSH / Linux / PVE) 参数</h3>
+                <span class="micro-capsule capsule-cyan">TCP 22 端口</span>
+              </div>
+
+              <div class="form-row-between">
+                <div>
+                  <div class="setting-title">系统服务器 (SSH) 测活周期 (秒)</div>
+                  <div class="setting-desc">
+                    Linux / PVE 宿主机 SSH 会话与系统探针巡检测活间隔（默认 5 秒）。<br>
+                    <strong style="color:var(--text-secondary);">在线判定机制:</strong> 通过建立 TCP 22 会话并读取轻量内核系统指标，成功即判定为「在线」；若 TCP 握手失败、鉴权失败或指令超时，触发重试计数，达到容错上限后判定为「离线」。
+                  </div>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <input type="number" class="apple-input" id="prefServerPingInterval" min="1" max="60" value="5" style="width:70px; text-align:center;">
+                  <span style="font-size:12px; color:var(--text-secondary); font-weight:600;">秒 (s)</span>
+                </div>
+              </div>
+
+              <div class="form-row-between">
+                <div>
+                  <div class="setting-title">系统服务器 (SSH) 测活重试容错次数</div>
+                  <div class="setting-desc">系统服务器 SSH 连接超时失败后的防抖重试次数（默认 2 次，达到次数才判定为离线）</div>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <input type="number" class="apple-input" id="prefServerPingRetry" min="0" max="10" value="2" style="width:70px; text-align:center;">
+                  <span style="font-size:12px; color:var(--text-secondary); font-weight:600;">次</span>
+                </div>
+              </div>
+
+              <div class="form-row-between">
+                <div>
+                  <div class="setting-title">Linux 子系统 SSH 探针采样频率 (秒)</div>
+                  <div class="setting-desc">控制长连接流式读取子系统 CPU、内存、Swap 与磁盘的周期（默认 2 秒，可调 1~60 秒）</div>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <input type="number" class="apple-input" id="prefSubsystemPollRate" min="1" max="60" value="2" style="width:70px; text-align:center;">
+                  <span style="font-size:12px; color:var(--text-secondary); font-weight:600;">秒 (s)</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 4. 系统运行日志保存策略配置卡片 -->
+            <div class="apple-card form-card max-w-card" style="margin-bottom: 20px;">
+              <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; border-bottom:1px solid var(--border-subtle); padding-bottom:8px;">
+                <h3 class="section-subtitle" style="margin:0; color:var(--text-primary);">📁 独立日志存储与自动轮转策略</h3>
+                <span class="micro-capsule capsule-indigo">独立文件保存</span>
+              </div>
+
+              <div class="form-row-between">
+                <div>
+                  <div class="setting-title">日志文件保存期限 (天)</div>
+                  <div class="setting-desc">运行日志单独保存在程序目录的 <code>logs/</code> 文件夹中。程序启动与日常运行时会自动清理超出保存期限的历史日志文件，防止日志无限膨胀占用磁盘。</div>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <input type="number" class="apple-input" id="prefLogRetentionDays" min="1" max="365" value="7" style="width:70px; text-align:center;">
+                  <span style="font-size:12px; color:var(--text-secondary); font-weight:600;">天 (默认 7 天)</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Auto-start Card -->
+            <div class="apple-card form-card max-w-card" style="margin-bottom: 20px;">
+              <h3 class="section-subtitle">自动化与系统自启</h3>
+              
+              <div class="switch-row">
+                <div class="switch-text">
+                  <span class="switch-title">随操作系统开机自动启动</span>
+                  <span class="switch-desc">用户登录系统时，自动在后台静默运行并恢复集群监管</span>
+                </div>
+                <label class="apple-switch">
+                  <input type="checkbox" id="chkAutoStart">
+                  <span class="switch-slider"></span>
+                </label>
+              </div>
+
+              <div class="switch-row">
+                <div class="switch-text">
+                  <span class="switch-title">启动后自动激活此前配置的温控设定</span>
+                  <span class="switch-desc">程序自启动后，自动继承并下发每台硬件节点原先保存的专属温控策略（曲线/手动/情景/原厂）</span>
+                </div>
+                <label class="apple-switch">
+                  <input type="checkbox" id="chkAutoStartRestoreSaved" checked>
+                  <span class="switch-slider"></span>
+                </label>
+              </div>
+
+              <div class="autostart-status-tip" id="autostartStatusTip">
+                当前自启状态: 正在检测系统注册表...
+              </div>
+            </div>
+
+            <!-- Environment Information -->
+            <div class="apple-card form-card max-w-card">
+              <h3 class="section-subtitle">运行环境与授权</h3>
+              <div class="status-info-box">
+                <div class="info-row">
+                  <span class="info-label">底层 IPMI 引擎:</span>
+                  <span class="info-value code-font" id="cfgIpmitoolPath">正在检测...</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">配置文件位置:</span>
+                  <span class="info-value code-font">当前目录 ./config.ini (完整兼容旧版)</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">软件授权模式:</span>
+                  <span class="info-value" style="color: var(--system-green); font-weight: 600;">永久免费完全开源 · 无激活码 · 无使用期限</span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+
+        <!-- ==================== TAB 8: ABOUT ==================== -->
+        <section class="tab-pane" id="pane-about">
+          <div class="about-container">
+            <div class="about-hero">
+              <div class="about-app-icon-wrapper">
+                <svg viewBox="0 0 48 48" class="about-app-icon-svg" fill="none">
+                  <rect width="48" height="48" rx="11" fill="url(#appHeroIconGrad)"/>
+                  <circle cx="24" cy="24" r="16" stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/>
+                  <path d="M24 24c-4-5.5-1.5-10 1.5-11 3.5 1 4 6 0 11z" fill="white" opacity="0.95"/>
+                  <path d="M24 24c5.5-4 10-1.5 11 1.5-1 3.5-6 4-11 0z" fill="white" opacity="0.95"/>
+                  <path d="M24 24c4 5.5 1.5 10-1.5 11-3.5-1-4-6 0-11z" fill="white" opacity="0.95"/>
+                  <path d="M24 24c-5.5 4-10 1.5-11-1.5 1-3.5 6-4 11 0z" fill="white" opacity="0.95"/>
+                  <circle cx="24" cy="24" r="3.2" fill="#0A84FF"/>
+                  <defs>
+                    <linearGradient id="appHeroIconGrad" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">
+                      <stop stop-color="#0A84FF"/>
+                      <stop offset="1" stop-color="#5E5CE6"/>
+                    </linearGradient>
+                  </defs>
+                </svg>
+              </div>
+              <h1 class="about-title">云枢 (YunShu)</h1>
+              <div class="about-version">Version 3.6.0 Pro · 多品牌集群与温控运维中心</div>
+              
+              <div style="display:flex; justify-content:center; gap:12px; flex-wrap:wrap; margin-bottom:14px;">
+                <div class="about-author-box" style="margin-bottom:0;">
+                  <span>软件作者：</span>
+                  <span class="about-author-name">空白色不语</span>
+                </div>
+                <div class="about-author-box about-qq-box" style="margin-bottom:0; cursor:pointer;" onclick="copyQQGroupNumber()" title="点击复制 QQ 群号">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" style="color:var(--system-blue);">
+                    <path d="M12 2C6.48 2 2 6.48 2 12c0 2.85 1.2 5.41 3.12 7.24-.12.63-.44 1.77-1.32 2.76 1.83 0 3.32-.82 4.19-1.57.65.19 1.34.29 2.01.29 5.52 0 10-4.48 10-10S17.52 2 12 2zm0 18c-.62 0-1.25-.09-1.85-.27l-.46-.14-.42.26c-.73.45-1.72.93-2.91 1.05.51-.62.82-1.32.96-1.89l.11-.47-.38-.3C5.52 17.06 4.5 14.65 4.5 12 4.5 7.86 7.86 4.5 12 4.5s7.5 3.36 7.5 7.5-3.36 8-7.5 8z"/>
+                  </svg>
+                  <span>官方交流群：</span>
+                  <span class="about-author-name" style="color:var(--system-green); font-family:var(--font-mono); letter-spacing:0.5px;">317151818</span>
+                  <span class="badge badge-cool" style="font-size:10px; padding:1px 5px; margin-left:2px;">点击复制</span>
+                </div>
+              </div>
+
+              <p class="about-desc">
+                专为现代数据中心、机柜与家庭实验算力打造的一站式多品牌服务器管家。<br>
+                双擎架构：<strong>物理硬件带外 (IPMI 2.0)</strong> 掌控 Dell、浪潮、华为、超微、联想等整机风扇温控与能耗；<strong>系统内核探针 (SSH / Linux / PVE)</strong> 实时掌控 CPU/内存/磁盘工况与集群批量运维分发，兼具 Apple HIG 极致美学与全天候智能告警。
+              </p>
+            </div>
+
+            <div class="about-grid">
+              <div class="about-card">
+                <div class="about-card-title">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--system-blue)" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+                  <span>多品牌硬件与智能温控</span>
+                </div>
+                <div class="about-card-text">
+                  全面兼容 Dell、Inspur、Huawei、Supermicro、Lenovo 等品牌。提供「原厂托管」、「动态多段曲线」、「手动调速」、「预设方案」四大风道策略，支持双路不对称微调。
+                </div>
+              </div>
+
+              <div class="about-card">
+                <div class="about-card-title">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--system-green)" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                  <span>系统级探针与批量运维</span>
+                </div>
+                <div class="about-card-text">
+                  基于原生 SSH 异步长连接探针，零 Agent 侵入采集 Linux / PVE 宿主机 CPU、内存、Swap 与磁盘健康度；支持多服务器多端并发批量下发运维 Shell 命令。
+                </div>
+              </div>
+
+              <div class="about-card">
+                <div class="about-card-title">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--system-orange)" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                  <span>多渠道告警与安全熔断</span>
+                </div>
+                <div class="about-card-text">
+                  内置硬件级防过热熔断保护；集成成熟通知模块（移植自 Apprise & ANotify），支持自定义模版并下发企业微信、钉钉、飞书、Server酱、Bark、PushPlus 实时推送。
+                </div>
+              </div>
+
+              <div class="about-card">
+                <div class="about-card-title">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--system-purple)" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                  <span>独立日志中心与自动清理</span>
+                </div>
+                <div class="about-card-text">
+                  默认精简过滤实时报错信息，支持一键切换全量交互调试模式；运行日志独立分天保存于 logs 目录，超出保留天数自动清理，兼具极致轻量与高可靠性。
+                </div>
+              </div>
+            </div>
+
+            <div class="about-footer">
+              <div>云枢 (YunShu) · 多品牌服务器集群温控与运维中心</div>
+              <div style="margin-top:4px;">Copyright © 2026 空白色不语. All rights reserved.</div>
+            </div>
+          </div>
+        </section>
+
+      </main>
+
+    </div>
+
+    <!-- ==================== MODAL 1: Add / Edit Hardware Node Modal ==================== -->
+    <div class="apple-modal-backdrop" id="hardwareNodeModalBackdrop" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); z-index:9999; justify-content:center; align-items:center;">
+      <div class="apple-modal-card" style="width:92%; max-width:640px; max-height:88vh; overflow-y:auto; background:var(--surface-primary); border-radius:14px; border:1px solid var(--border-strong); box-shadow:0 20px 40px rgba(0,0,0,0.3); padding:20px 24px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border-subtle); padding-bottom:12px; margin-bottom:16px;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="font-size:20px;">🖥️</span>
+            <div>
+              <h3 style="margin:0; font-size:16px; font-weight:700; color:var(--text-primary);" id="serverFormTitle">配置硬件节点</h3>
+              <span style="font-size:11.5px; color:var(--text-tertiary);">Dell iDRAC / BMC 带外硬件管理与温控下发通道</span>
+            </div>
+          </div>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <div id="srvFormStatusPill" class="connection-pill disconnected" style="display:none;">
+              <span class="status-dot"></span>
+              <span class="status-text" id="srvFormStatusText">未检测</span>
+            </div>
+            <button class="secondary-btn" id="btnCloseHardwareNodeModal" style="border-radius:50%; width:28px; height:28px; padding:0; display:flex; align-items:center; justify-content:center;">✕</button>
+          </div>
+        </div>
+
+        <!-- 表单字段排布优化: 核心连接要素 (名称、IP、账号、密码) 置于最上方; 自动嗅探与品牌/型号/SN置于下方一键获取UI -->
+        <div class="form-grid-2">
+          <div class="form-item">
+            <label>节点友好名称</label>
+            <input type="text" class="apple-input" id="srvFormName" placeholder="例如: 核心计算节点">
+          </div>
+          <div class="form-item">
+            <label>BMC / iDRAC IP 地址</label>
+            <input type="text" class="apple-input" id="srvFormIp" placeholder="192.168.1.100">
+          </div>
+          <div class="form-item">
+            <label>IPMI 用户名</label>
+            <input type="text" class="apple-input" id="srvFormUser" placeholder="root">
+          </div>
+          <div class="form-item">
+            <label>IPMI 访问密码</label>
+            <input type="password" class="apple-input" id="srvFormPassword" placeholder="输入 BMC 密码">
+          </div>
+          
+          <!-- 硬件资产信息与自动嗅探卡片 (包含厂商品牌、型号、出厂SN序列号) -->
+          <div class="form-item" style="grid-column: 1 / -1; background:var(--surface-secondary); padding:12px 14px; border-radius:10px; border:1px dashed var(--border-subtle);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+              <span style="font-size:12.5px; font-weight:600; color:var(--text-primary);">⚡ 硬件资产与品牌属性 (支持一键自动嗅探)</span>
+              <button type="button" class="primary-btn" id="btnAutoProbeFru" style="font-size:11px; padding:3px 12px; border-radius:9999px; display:inline-flex; align-items:center; gap:4px;">
+                <span>⚡ 立即获取品牌、型号与SN</span>
+              </button>
+            </div>
+            
+            <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px;">
+              <div>
+                <label style="font-size:11.5px; color:var(--text-secondary); margin-bottom:4px; display:block;">硬件厂商品牌</label>
+                <select class="apple-select" id="srvFormBrand" style="width:100%; font-size:12px;">
+                  <option value="dell">Dell (戴尔)</option>
+                  <option value="inspur">Inspur (浪潮)</option>
+                  <option value="huawei">Huawei (华为)</option>
+                  <option value="supermicro">Supermicro (超微)</option>
+                  <option value="lenovo">Lenovo (联想)</option>
+                  <option value="generic">通用标准 IPMI 2.0</option>
+                </select>
+              </div>
+              <div>
+                <label style="font-size:11.5px; color:var(--text-secondary); margin-bottom:4px; display:block;">服务器型号</label>
+                <input type="text" class="apple-input" id="srvFormModel" placeholder="自动获取或手动填入 (如 R730xd)" style="width:100%;">
+              </div>
+              <div>
+                <label style="font-size:11.5px; color:var(--text-secondary); margin-bottom:4px; display:block;">出厂序列号 (SN / Tag)</label>
+                <input type="text" class="apple-input" id="srvFormSerial" placeholder="自动获取或手动填入" style="width:100%;">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; align-items:center; margin-top:20px; border-top:1px solid var(--border-subtle); padding-top:14px; gap:8px;">
+          <button class="secondary-btn" id="btnCancelServerForm">取消</button>
+          <button class="primary-btn" id="btnSaveServerForm">确定并保存节点</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== MODAL 2: Add / Edit System Server (SSH) Modal ==================== -->
+    <div class="apple-modal-backdrop" id="systemServerModalBackdrop" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); z-index:9999; justify-content:center; align-items:center;">
+      <div class="apple-modal-card" style="width:92%; max-width:640px; max-height:88vh; overflow-y:auto; background:var(--surface-primary); border-radius:14px; border:1px solid var(--border-strong); box-shadow:0 20px 40px rgba(0,0,0,0.3); padding:20px 24px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border-subtle); padding-bottom:12px; margin-bottom:16px;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="font-size:20px;">🐧</span>
+            <div>
+              <h3 style="margin:0; font-size:16px; font-weight:700; color:var(--text-primary);" id="sysServerFormTitle">配置系统服务器</h3>
+              <span style="font-size:11.5px; color:var(--text-tertiary);">Linux SSH 探针 · 采集 OS 资源指标与绑定硬件节点</span>
+            </div>
+          </div>
+          <button class="secondary-btn" id="btnCloseSystemServerModal" style="border-radius:50%; width:28px; height:28px; padding:0; display:flex; align-items:center; justify-content:center;">✕</button>
+        </div>
+
+        <!-- 系统服务器表单优化: 核心连接要素 (名称、绑定、IP、端口、账号、密码) 在上; 自动获取系统版本在下 -->
+        <div class="form-grid-2">
+          <div class="form-item">
+            <label>服务器友好名称</label>
+            <input type="text" class="apple-input" id="sysSrvFormName" placeholder="例如: PVE 宿主 / Ubuntu 业务机">
+          </div>
+          <div class="form-item">
+            <label>所属硬件节点 (可留空保持独立)</label>
+            <select class="apple-select" id="sysSrvFormNodeSelect">
+              <option value="">-- 独立服务器 (不绑定任何硬件节点) --</option>
+            </select>
+          </div>
+          <div class="form-item">
+            <label>SSH IP / 域名</label>
+            <input type="text" class="apple-input" id="sysSrvFormHost" placeholder="192.168.1.100">
+          </div>
+          <div class="form-item">
+            <label>SSH 端口</label>
+            <input type="number" class="apple-input" id="sysSrvFormPort" value="22" min="1" max="65535">
+          </div>
+          <div class="form-item">
+            <label>SSH 登录账号</label>
+            <input type="text" class="apple-input" id="sysSrvFormUser" value="root" placeholder="root">
+          </div>
+          <div class="form-item">
+            <label>SSH 访问密码</label>
+            <input type="password" class="apple-input" id="sysSrvFormPassword" placeholder="留空为无密码/密钥">
+          </div>
+          <div class="form-item" style="grid-column: 1 / -1; background:var(--surface-secondary); padding:10px 14px; border-radius:10px; border:1px dashed var(--border-subtle);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+              <span style="font-size:12.5px; font-weight:600; color:var(--text-primary);">🐧 系统版本与环境 (支持一键自动探测)</span>
+              <button type="button" class="primary-btn" id="btnAutoProbeOs" style="font-size:11px; padding:3px 10px; border-radius:9999px; display:inline-flex; align-items:center; gap:4px;">
+                <span>⚡ 立即获取系统版本</span>
+              </button>
+            </div>
+            <input type="text" class="apple-input" id="sysSrvFormOsName" placeholder="点击右上方立即获取，或手动输入 (如 Proxmox VE 8.1 / Ubuntu 22.04 / Debian 12)">
+          </div>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; align-items:center; margin-top:20px; border-top:1px solid var(--border-subtle); padding-top:14px; gap:8px;">
+          <button class="secondary-btn" id="btnCancelSysServerForm">取消</button>
+          <button class="primary-btn" id="btnSaveSysServerForm">保存系统服务器</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== MODAL: Hardware Node Deep Detail Modal (硬件物理节点详情弹窗) ==================== -->
+    <div class="apple-modal-backdrop" id="hardwareNodeDetailModalBackdrop" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); z-index:9999; justify-content:center; align-items:center;">
+      <div class="apple-modal-card" style="width:92%; max-width:760px; max-height:85vh; overflow-y:auto; background:var(--surface-primary); border-radius:14px; border:1px solid var(--border-strong); box-shadow:0 20px 40px rgba(0,0,0,0.3); padding:20px 24px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border-subtle); padding-bottom:12px; margin-bottom:16px;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="font-size:20px;">🖥️</span>
+            <div>
+              <h3 style="margin:0; font-size:16px; font-weight:700; color:var(--text-primary);" id="nodeDetailModalTitle">硬件物理节点详情</h3>
+              <span style="font-size:11.5px; color:var(--text-tertiary);" id="nodeDetailModalSubtitle">带外 BMC / iDRAC 硬件传感器实时遥测</span>
+            </div>
+          </div>
+          <button class="secondary-btn" id="btnCloseHardwareNodeDetailModal" style="border-radius:50%; width:28px; height:28px; padding:0; display:flex; align-items:center; justify-content:center;">✕</button>
+        </div>
+
+        <!-- Main Metrics Quick Grid -->
+        <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:12px; margin-bottom:18px;">
+          <div style="background:var(--surface-secondary); padding:10px 12px; border-radius:8px; border:1px solid var(--border-subtle);">
+            <div style="font-size:11px; color:var(--text-tertiary); margin-bottom:4px;">最高核心温度</div>
+            <div style="font-size:18px; font-weight:700; color:var(--accent-blue);" id="nodeModalCpu">--</div>
+            <div style="font-size:10px; color:var(--text-tertiary); margin-top:2px;">CPU 算力核心</div>
+          </div>
+          <div style="background:var(--surface-secondary); padding:10px 12px; border-radius:8px; border:1px solid var(--border-subtle);">
+            <div style="font-size:11px; color:var(--text-tertiary); margin-bottom:4px;">机箱进气温度</div>
+            <div style="font-size:18px; font-weight:700; color:var(--system-green);" id="nodeModalInlet">--</div>
+            <div style="font-size:10px; color:var(--text-tertiary); margin-top:2px;">进风口环境</div>
+          </div>
+          <div style="background:var(--surface-secondary); padding:10px 12px; border-radius:8px; border:1px solid var(--border-subtle);">
+            <div style="font-size:11px; color:var(--text-tertiary); margin-bottom:4px;">风扇控制转速</div>
+            <div style="font-size:18px; font-weight:700; color:var(--system-purple);" id="nodeModalSpeed">--</div>
+            <div style="font-size:10px; color:var(--text-tertiary); margin-top:2px;" id="nodeModalRpm">-- RPM</div>
+          </div>
+          <div style="background:var(--surface-secondary); padding:10px 12px; border-radius:8px; border:1px solid var(--border-subtle);">
+            <div style="font-size:11px; color:var(--text-tertiary); margin-bottom:4px;">整机实时功耗</div>
+            <div style="font-size:18px; font-weight:700; color:var(--system-orange);" id="nodeModalPower">--</div>
+            <div style="font-size:10px; color:var(--text-tertiary); margin-top:2px;">实测电源能耗</div>
+          </div>
+        </div>
+
+        <!-- Detailed Node Specs Table -->
+        <div style="background:var(--surface-secondary); border-radius:10px; padding:14px; border:1px solid var(--border-subtle); margin-bottom:18px;">
+          <h4 style="margin:0 0 10px 0; font-size:13px; font-weight:600; color:var(--text-secondary);">节点硬件配置与通信参数</h4>
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; font-size:11.5px;">
+            <div style="display:flex; justify-content:space-between; border-bottom:1px dashed var(--border-subtle); padding-bottom:6px;">
+              <span style="color:var(--text-tertiary);">服务器品牌</span>
+              <strong style="color:var(--text-primary);" id="nodeModalBrand">--</strong>
+            </div>
+            <div style="display:flex; justify-content:space-between; border-bottom:1px dashed var(--border-subtle); padding-bottom:6px;">
+              <span style="color:var(--text-tertiary);">整机具体型号</span>
+              <strong style="color:var(--text-primary);" id="nodeModalModel">--</strong>
+            </div>
+            <div style="display:flex; justify-content:space-between; border-bottom:1px dashed var(--border-subtle); padding-bottom:6px;">
+              <span style="color:var(--text-tertiary);">服务标签 / 序列号</span>
+              <strong style="color:var(--accent-blue);" id="nodeModalSerial">--</strong>
+            </div>
+            <div style="display:flex; justify-content:space-between; border-bottom:1px dashed var(--border-subtle); padding-bottom:6px;">
+              <span style="color:var(--text-tertiary);">BMC 带外 IP</span>
+              <strong style="color:var(--text-primary);" id="nodeModalIp">--</strong>
+            </div>
+            <div style="display:flex; justify-content:space-between; border-bottom:1px dashed var(--border-subtle); padding-bottom:6px;">
+              <span style="color:var(--text-tertiary);">当前温控策略</span>
+              <strong style="color:var(--system-green);" id="nodeModalMode">--</strong>
+            </div>
+            <div style="display:flex; justify-content:space-between; border-bottom:1px dashed var(--border-subtle); padding-bottom:6px;">
+              <span style="color:var(--text-tertiary);">硬件响应延时</span>
+              <strong style="color:var(--system-green);" id="nodeModalLatency">--</strong>
+            </div>
+            <div style="display:flex; justify-content:space-between; border-bottom:1px dashed var(--border-subtle); padding-bottom:6px;">
+              <span style="color:var(--text-tertiary);">联机状态 / 详情</span>
+              <strong style="color:var(--text-primary);" id="nodeModalStatus">--</strong>
+            </div>
+            <div style="display:flex; justify-content:space-between; border-bottom:1px dashed var(--border-subtle); padding-bottom:6px;">
+              <span style="color:var(--text-tertiary);">最近遥测刷新</span>
+              <strong style="color:var(--text-secondary);" id="nodeModalTime">--</strong>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end;">
+          <button class="primary-btn" id="btnConfirmCloseHardwareNodeDetail" style="padding:6px 18px;">关闭</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Server Deep Telemetry Detail Modal (系统服务器详情弹窗) -->
+    <div class="apple-modal-backdrop" id="serverDetailModalBackdrop" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); z-index:9999; justify-content:center; align-items:center;">
+      <div class="apple-modal-card" style="width:92%; max-width:680px; max-height:85vh; overflow-y:auto; background:var(--surface-primary); border-radius:14px; border:1px solid var(--border-strong); box-shadow:0 20px 40px rgba(0,0,0,0.3); padding:20px 24px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border-subtle); padding-bottom:12px; margin-bottom:16px;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="font-size:20px;">🐧</span>
+            <div>
+              <h3 style="margin:0; font-size:16px; font-weight:700; color:var(--text-primary);" id="srvModalTitle">系统服务器详情</h3>
+              <span style="font-size:11.5px; color:var(--text-tertiary);" id="srvModalSubtitle">Linux 内核级 SSH 实时探针遥测</span>
+            </div>
+          </div>
+          <button class="secondary-btn" id="btnCloseServerDetailModal" style="border-radius:50%; width:28px; height:28px; padding:0; display:flex; align-items:center; justify-content:center;">✕</button>
+        </div>
+
+        <!-- Main Metrics Quick Grid -->
+        <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:12px; margin-bottom:18px;">
+          <div style="background:var(--surface-secondary); padding:10px 12px; border-radius:8px; border:1px solid var(--border-subtle);">
+            <div style="font-size:11px; color:var(--text-tertiary); margin-bottom:4px;">CPU 算力负载</div>
+            <div style="font-size:18px; font-weight:700; color:var(--accent-blue);" id="srvModalCpu">--</div>
+            <div style="font-size:10px; color:var(--text-tertiary); margin-top:2px;" id="srvModalCpuCores">-- 核心</div>
+          </div>
+          <div style="background:var(--surface-secondary); padding:10px 12px; border-radius:8px; border:1px solid var(--border-subtle);">
+            <div style="font-size:11px; color:var(--text-tertiary); margin-bottom:4px;">物理内存水线</div>
+            <div style="font-size:18px; font-weight:700; color:var(--system-green);" id="srvModalMem">--</div>
+            <div style="font-size:10px; color:var(--text-tertiary); margin-top:2px;" id="srvModalMemVal">-- / -- GB</div>
+          </div>
+          <div style="background:var(--surface-secondary); padding:10px 12px; border-radius:8px; border:1px solid var(--border-subtle);">
+            <div style="font-size:11px; color:var(--text-tertiary); margin-bottom:4px;">Swap 换页占用</div>
+            <div style="font-size:18px; font-weight:700; color:var(--system-orange);" id="srvModalSwap">--</div>
+            <div style="font-size:10px; color:var(--text-tertiary); margin-top:2px;" id="srvModalSwapVal">-- / -- GB</div>
+          </div>
+          <div style="background:var(--surface-secondary); padding:10px 12px; border-radius:8px; border:1px solid var(--border-subtle);">
+            <div style="font-size:11px; color:var(--text-tertiary); margin-bottom:4px;">根分区存储</div>
+            <div style="font-size:18px; font-weight:700; color:var(--system-purple);" id="srvModalDisk">--</div>
+            <div style="font-size:10px; color:var(--text-tertiary); margin-top:2px;" id="srvModalDiskVal">-- / -- GB</div>
+          </div>
+        </div>
+
+        <!-- Detailed System Specs Table -->
+        <div style="background:var(--surface-secondary); border-radius:10px; padding:14px; border:1px solid var(--border-subtle); margin-bottom:18px;">
+          <h4 style="margin:0 0 10px 0; font-size:13px; font-weight:600; color:var(--text-secondary);">系统环境与核心参数</h4>
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; font-size:11.5px;">
+            <div style="display:flex; justify-content:space-between; border-bottom:1px dashed var(--border-subtle); padding-bottom:6px;">
+              <span style="color:var(--text-tertiary);">主机名 (Hostname)</span>
+              <strong style="color:var(--text-primary);" id="srvModalHostname">--</strong>
+            </div>
+            <div style="display:flex; justify-content:space-between; border-bottom:1px dashed var(--border-subtle); padding-bottom:6px;">
+              <span style="color:var(--text-tertiary);">SSH 访问端点</span>
+              <strong style="color:var(--text-primary);" id="srvModalEndpoint">--</strong>
+            </div>
+            <div style="display:flex; justify-content:space-between; border-bottom:1px dashed var(--border-subtle); padding-bottom:6px;">
+              <span style="color:var(--text-tertiary);">平均负载 (1/5/15m)</span>
+              <strong style="color:var(--text-primary);" id="srvModalLoad">--</strong>
+            </div>
+            <div style="display:flex; justify-content:space-between; border-bottom:1px dashed var(--border-subtle); padding-bottom:6px;">
+              <span style="color:var(--text-tertiary);">网络探测延时 (RTT)</span>
+              <strong style="color:var(--system-green);" id="srvModalLatency">--</strong>
+            </div>
+            <div style="display:flex; justify-content:space-between; border-bottom:1px dashed var(--border-subtle); padding-bottom:6px;">
+              <span style="color:var(--text-tertiary);">所属物理硬件节点</span>
+              <strong style="color:var(--accent-blue);" id="srvModalBoundNode">--</strong>
+            </div>
+            <div style="display:flex; justify-content:space-between; padding-top:2px;">
+              <span style="color:var(--text-tertiary);">系统运行时长 (Uptime)</span>
+              <strong style="color:var(--text-primary);" id="srvModalUptime">--</strong>
+            </div>
+            <div style="display:flex; justify-content:space-between; padding-top:2px;">
+              <span style="color:var(--text-tertiary);">数据最近更新时间</span>
+              <strong style="color:var(--text-secondary);" id="srvModalTime">--</strong>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:10px;">
+          <button class="primary-btn" id="btnConfirmCloseServerDetail">关闭</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Notification Toast Popup -->
+    <div class="apple-toast" id="toast">
+      <span class="toast-icon" id="toastIcon"></span>
+      <span class="toast-message" id="toastMessage"></span>
+    </div>
+
+    <!-- Native Window Border Resizing Grips (Apple HIG Frameless Resizing) -->
+    <div class="resize-handle resize-top" data-dir="n"></div>
+    <div class="resize-handle resize-bottom" data-dir="s"></div>
+    <div class="resize-handle resize-left" data-dir="w"></div>
+    <div class="resize-handle resize-right" data-dir="e"></div>
+    <div class="resize-handle resize-top-left" data-dir="nw"></div>
+    <div class="resize-handle resize-top-right" data-dir="ne"></div>
+    <div class="resize-handle resize-bottom-left" data-dir="sw"></div>
+    <div class="resize-handle resize-bottom-right" data-dir="se" title="按住拖拽以自由调整窗口大小">
+      <svg class="resize-corner-icon" viewBox="0 0 10 10">
+        <line x1="8" y1="2" x2="2" y2="8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+        <line x1="8" y1="5" x2="5" y2="8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+      </svg>
+    </div>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

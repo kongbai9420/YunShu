@@ -1,0 +1,56 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.spec
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Executables & large archives
+*.exe
+*.zip
+*.rar
+*.7z
+*.tar.gz
+
+# Local logs & hardware cache
+logs/
+sdr_cache/
+*.log
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Local Release staging & legacy test folders
+云枢-Release/
+Dell_EMC_Fans_Controller_*
+apple-design-skill/
+.vscode/
+.idea/

@@ -1,0 +1,6 @@
+pywebview>=5.0.0
+paramiko>=3.4.0
+cryptography>=42.0.0
+bcrypt>=4.1.0
+bottle>=0.12.25
+pythonnet>=3.0.3; sys_platform == 'win32'
