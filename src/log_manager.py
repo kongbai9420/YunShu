@@ -15,6 +15,54 @@ from collections import deque
 import threading
 from typing import List, Dict, Any
 
+class SmartLogFilter(logging.Filter):
+    """
+    智能日志过滤器：
+    即使用户开启调试模式，也严禁无异常的周期性轮询与底噪（如 Paramiko 通道握手包、动态温控微调、心跳探测）刷屏。
+    只保留：
+    1. 所有级别为 WARNING / ERROR / CRITICAL 的异常报错信息
+    2. 关键业务与生命周期操作的重要信息（开关机、节点上下线状态变更、用户配置与调速、预警通知、资产检测）
+    """
+    NOISY_LOGGERS = {
+        "paramiko", "paramiko.transport", "paramiko.transport.sftp",
+        "urllib3", "urllib3.connectionpool", "webview", "clr_loader",
+        "werkzeug", "bottle"
+    }
+
+    NOISY_KEYWORDS = [
+        "dynamic adjust",
+        "探针瞬时抖动容错",
+        "sending packet",
+        "received packet",
+        "eof received",
+        "kex algos",
+        "ciphers",
+        "initial fast ping",
+        "probe loop tick",
+        "fast cwd"
+    ]
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        # 1. 任何警告、错误及严重故障，100% 绝对保留
+        if record.levelno >= logging.WARNING:
+            return True
+
+        # 2. 静音纯噪音第三方库的 INFO / DEBUG
+        logger_name = (record.name or "").lower()
+        for noisy in self.NOISY_LOGGERS:
+            if logger_name == noisy or logger_name.startswith(noisy + "."):
+                return False
+
+        # 3. 过滤无报错周期性轮询的重复底噪消息
+        msg = (record.getMessage() or "").lower()
+        for kw in self.NOISY_KEYWORDS:
+            if kw in msg:
+                return False
+
+        # 4. 其余重要生命周期与操作日志保留
+        return True
+
+
 class MemoryLogHandler(logging.Handler):
     def __init__(self, capacity=500):
         super().__init__()
@@ -47,6 +95,7 @@ class MemoryLogHandler(logging.Handler):
         if not debug_mode:
             filtered = [e for e in all_entries if e["level"] in ("ERROR", "CRITICAL", "WARNING")]
         else:
+            # 开启调试模式：返回重要事件与报错信息（轮询底噪已被 SmartLogFilter 过滤）
             filtered = all_entries
 
         # Return latest entries up to limit
@@ -83,14 +132,22 @@ class LogManager:
 
     def _setup_logging(self):
         formatter = logging.Formatter("%(asctime)s [%(levelname)s] [%(name)s] %(message)s", "%Y-%m-%d %H:%M:%S")
+        smart_filter = SmartLogFilter()
+
         self.memory_handler.setFormatter(formatter)
         self.memory_handler.setLevel(logging.DEBUG)
+        self.memory_handler.addFilter(smart_filter)
+
+        # Mute verbose third-party loggers so routine polling never spams
+        for noisy_name in ("paramiko", "paramiko.transport", "urllib3", "urllib3.connectionpool", "webview", "clr_loader", "werkzeug", "bottle"):
+            logging.getLogger(noisy_name).setLevel(logging.WARNING)
 
         # File handler for dedicated daily/app log
         try:
             file_handler = logging.FileHandler(self.current_log_file, encoding="utf-8", delay=True)
             file_handler.setFormatter(formatter)
             file_handler.setLevel(logging.DEBUG)
+            file_handler.addFilter(smart_filter)
         except Exception as e:
             file_handler = None
             print(f"Warning: Could not create file log handler: {e}")

@@ -1238,11 +1238,14 @@ class IPMICore:
                 node_ping_retries = self.config_mgr.get_int("node_ping_retry_count", 2)
                 was_connected = (srv_id in self.cluster_telemetry and self.cluster_telemetry[srv_id].get("connected"))
                 if was_connected and fail_count <= node_ping_retries:
-                    logger.warning(f"Node [{name} ({ip})] 探针瞬时抖动容错 ({fail_count}/{node_ping_retries+1}): {out.strip()[:60]}... 保持最后健康遥测")
                     self.cluster_telemetry[srv_id]["latency_ms"] = latency
                     if srv_id == active_id:
                         self.last_sensor_data["latency_ms"] = latency
                     return
+
+                # 超过重试阈值确认断开时才记录真实错误日志
+                if was_connected or srv_id not in self.cluster_telemetry or self.cluster_telemetry[srv_id].get("connected"):
+                    logger.error(f"节点 [{name} ({ip})] 离线或握手失败: {out.strip() or '连接超时或鉴权未响应'}")
 
                 self.cluster_telemetry[srv_id] = {
                     "id": srv_id,
@@ -1807,7 +1810,6 @@ class IPMICore:
 
         last_spd = self._last_applied_speeds.get(srv_id, -1)
         if abs(target_speed - last_spd) >= 2 or last_spd == -1:
-            logger.info(f"Node [{target_srv.get('name')}] Dynamic Adjust: CPU={max_cpu_temp}C -> Target Speed={target_speed}%")
             self.set_all_fans_speed(target_speed, server_override=target_srv, preserve_mode=True)
             self._last_applied_speeds[srv_id] = target_speed
 

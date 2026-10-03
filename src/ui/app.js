@@ -4509,7 +4509,7 @@ function updateLogViewUI(debugEnabled) {
   }
   if (ruleText) {
     ruleText.style.color = debugEnabled ? '#a371f7' : '#f0883e';
-    ruleText.textContent = debugEnabled ? '所有级别 (INFO / DEBUG / WARNING / ERROR)' : '仅 ERROR / WARNING / 异常报错';
+    ruleText.textContent = debugEnabled ? '重要业务/操作事件 + 全部异常报错 (已自动过滤无异常轮询底噪)' : '仅 ERROR / WARNING / 异常报错';
   }
 }
 
