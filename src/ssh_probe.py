@@ -361,28 +361,36 @@ class SystemServerWorker:
                 pass
             self._disconnect()
 
-        try:
-            client = paramiko.SSHClient()
-            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            client.connect(
-                hostname=self.host,
-                port=self.port,
-                username=self.username,
-                password=self.password if self.password else None,
-                timeout=4.0,
-                banner_timeout=5.0,
-                auth_timeout=5.0,
-                allow_agent=False,
-                look_for_keys=False
-            )
-            self._client = client
-            return True
-        except Exception as e:
-            self._disconnect()
-            self.last_telemetry["connected"] = False
-            self.last_telemetry["last_error"] = str(e)
-            self.last_telemetry["last_updated"] = time.strftime("%H:%M:%S")
-            return False
+        # 针对 Dropbear 或嵌入式 SSH 重试策略：banner 读取超时或瞬态 EOF 时重试一次
+        max_attempts = 2
+        for attempt in range(1, max_attempts + 1):
+            try:
+                client = paramiko.SSHClient()
+                client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                client.connect(
+                    hostname=self.host,
+                    port=self.port,
+                    username=self.username,
+                    password=self.password if self.password else None,
+                    timeout=5.0,
+                    banner_timeout=10.0,
+                    auth_timeout=8.0,
+                    allow_agent=False,
+                    look_for_keys=False
+                )
+                self._client = client
+                return True
+            except Exception as e:
+                self._disconnect()
+                err_str = str(e)
+                # 若为首次尝试且发生 banner 读取失败/协议中断，轻微间隔 0.3s 后重试一次
+                if attempt < max_attempts and ("banner" in err_str.lower() or "eof" in err_str.lower()):
+                    time.sleep(0.3)
+                    continue
+                self.last_telemetry["connected"] = False
+                self.last_telemetry["last_error"] = "SSH 握手协议读取中断 (Banner EOF)" if "banner" in err_str.lower() else err_str
+                self.last_telemetry["last_updated"] = time.strftime("%H:%M:%S")
+                return False
 
     def _detect_os_if_needed(self):
         """首次获取时尝试获取一次服务器操作系统，成功后持久化保存，后续不再探测"""
@@ -604,6 +612,21 @@ class SubsystemProbeManager:
                     pass
                 t = threading.Thread(target=w.poll_once, daemon=True)
                 t.start()
+
+    def poll_all_now(self):
+        """立即并发轮询所有已启用的系统服务器"""
+        self.sync_subsystems_from_config()
+        workers_snapshot = []
+        with self._lock:
+            workers_snapshot = list(self._workers.values())
+        threads = []
+        for w in workers_snapshot:
+            if w.enabled:
+                t = threading.Thread(target=w.poll_once, daemon=True)
+                threads.append(t)
+                t.start()
+        for t in threads:
+            t.join(timeout=4.0)
 
     def force_reconnect_all(self):
         """强制重连所有系统服务器：断开已有或处于连接中的 SSH Session 并立即全新并发握手重连"""
