@@ -581,6 +581,27 @@ document.addEventListener('DOMContentLoaded', () => {
   bootstrapApp();
 });
 
+function triggerOpenAddHardwareNodeModal() {
+  editingServerId = null;
+  const formTitle = document.getElementById('serverFormTitle');
+  if (formTitle) formTitle.textContent = '添加硬件节点 (IPMI)';
+  const srvName = document.getElementById('srvFormName');
+  if (srvName) srvName.value = '';
+  const brandSel = document.getElementById('srvFormBrand');
+  if (brandSel) brandSel.value = 'dell';
+  const srvModel = document.getElementById('srvFormModel');
+  if (srvModel) srvModel.value = '';
+  const serialEl = document.getElementById('srvFormSerial');
+  if (serialEl) serialEl.value = '';
+  const srvIp = document.getElementById('srvFormIp');
+  if (srvIp) srvIp.value = '192.168.1.1';
+  const srvUser = document.getElementById('srvFormUser');
+  if (srvUser) srvUser.value = 'root';
+  const srvPass = document.getElementById('srvFormPassword');
+  if (srvPass) srvPass.value = '';
+  openHardwareNodeModal();
+}
+
 // Window Traffic Lights & Controls
 function initWindowControls() {
   const btnClose = document.getElementById('btnWindowClose');
@@ -976,10 +997,13 @@ function initDashboardControls() {
       document.querySelector('.nav-item[data-tab="servers"]').click();
     });
   }
-  document.getElementById('btnAddServerQuick').addEventListener('click', () => {
-    const openBtn = document.getElementById('btnOpenAddServerModal');
-    if (openBtn) openBtn.click();
-  });
+  const btnAddQuick = document.getElementById('btnAddServerQuick');
+  if (btnAddQuick) {
+    btnAddQuick.addEventListener('click', (e) => {
+      e.preventDefault();
+      triggerOpenAddHardwareNodeModal();
+    });
+  }
 
   // Probe Layout Switcher (方块 Grid / 长条 Row)
   const probeLayoutSwitch = document.getElementById('probeLayoutSwitch');
@@ -3507,20 +3531,13 @@ function initServerClusterManagement() {
   }
 
   // Modal 1: 硬件节点
-  document.getElementById('btnOpenAddServerModal').addEventListener('click', () => {
-    editingServerId = null;
-    document.getElementById('serverFormTitle').textContent = '添加硬件节点 (IPMI)';
-    document.getElementById('srvFormName').value = '';
-    const brandSel = document.getElementById('srvFormBrand');
-    if (brandSel) brandSel.value = 'dell';
-    document.getElementById('srvFormModel').value = '';
-    const serialEl = document.getElementById('srvFormSerial');
-    if (serialEl) serialEl.value = '';
-    document.getElementById('srvFormIp').value = '192.168.1.1';
-    document.getElementById('srvFormUser').value = 'root';
-    document.getElementById('srvFormPassword').value = '';
-    openHardwareNodeModal();
-  });
+  const btnOpenAddSrv = document.getElementById('btnOpenAddServerModal');
+  if (btnOpenAddSrv) {
+    btnOpenAddSrv.addEventListener('click', (e) => {
+      e.preventDefault();
+      triggerOpenAddHardwareNodeModal();
+    });
+  }
 
   // 自动嗅探目标 BMC 的硬件厂商、型号与序列号
   const btnAutoProbe = document.getElementById('btnAutoProbeFru');
@@ -3852,19 +3869,31 @@ window.testSubsystemSSHRow = async function(idx) {
 // Helper functions for modern Modal dialogs
 function openHardwareNodeModal() {
   const modal = document.getElementById('hardwareNodeModalBackdrop');
-  if (modal) modal.style.display = 'flex';
+  if (modal) {
+    modal.style.display = 'flex';
+    modal.classList.add('active');
+  }
 }
 function closeHardwareNodeModal() {
   const modal = document.getElementById('hardwareNodeModalBackdrop');
-  if (modal) modal.style.display = 'none';
+  if (modal) {
+    modal.style.display = 'none';
+    modal.classList.remove('active');
+  }
 }
 function openSystemServerModal() {
   const modal = document.getElementById('systemServerModalBackdrop');
-  if (modal) modal.style.display = 'flex';
+  if (modal) {
+    modal.style.display = 'flex';
+    modal.classList.add('active');
+  }
 }
 function closeSystemServerModal() {
   const modal = document.getElementById('systemServerModalBackdrop');
-  if (modal) modal.style.display = 'none';
+  if (modal) {
+    modal.style.display = 'none';
+    modal.classList.remove('active');
+  }
 }
 
 // Global ESC key listener to dismiss all modern modals

@@ -2941,6 +2941,51 @@ body.theme-dark .seg-btn:hover {
 }
 
 /* ========================================================
+   Modern Apple Modals & Dialogs
+   ======================================================== */
+.apple-modal-backdrop {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  background: rgba(0, 0, 0, 0.55) !important;
+  backdrop-filter: blur(16px) saturate(1.2) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(1.2) !important;
+  z-index: 999999 !important;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.apple-modal-backdrop.active,
+.apple-modal-backdrop[style*="display: flex"] {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+.apple-modal-card {
+  width: 92%;
+  max-width: 640px;
+  max-height: 88vh;
+  overflow-y: auto;
+  background: var(--surface-primary);
+  border-radius: 16px;
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+  padding: 24px 28px;
+  transform: scale(0.96);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.apple-modal-backdrop.active .apple-modal-card,
+.apple-modal-backdrop[style*="display: flex"] .apple-modal-card {
+  transform: scale(1) !important;
+}
+
+/* ========================================================
    Native Window Border Resizing Grips (Apple HIG Frameless)
    ======================================================== */
 .resize-handle {
