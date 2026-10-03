@@ -912,20 +912,31 @@ body.theme-dark .seg-btn:hover {
   color: var(--system-orange);
 }
 
-/* Power Control Micro Capsules Bar (Apple HIG 精致四胶囊开关机集群) */
-.power-capsules-bar {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
+/* Power Control Micro Capsules Column (在名字与工况指标之间这中间空出，从上到下排序的小胶囊) */
+.probe-power-capsules-column {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: stretch;
+  gap: 2.5px;
   flex-shrink: 0;
+  margin-left: 10px;
+  padding: 1px 0;
+  min-width: 44px;
+}
+
+.probe-cards-grid.compact-row .probe-power-capsules-column {
+  margin-left: 10px;
+  margin-right: 6px;
+  min-width: 44px;
 }
 
 .power-capsule {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 1.5px 5.5px;
-  font-size: 9.5px;
+  padding: 1px 6px;
+  font-size: 9px;
   font-weight: 600;
   line-height: 12px;
   border-radius: 4px;
@@ -933,8 +944,10 @@ body.theme-dark .seg-btn:hover {
   cursor: pointer;
   transition: all 0.16s cubic-bezier(0.16, 1, 0.3, 1);
   user-select: none;
-  background: var(--surface-secondary);
   font-family: inherit;
+  white-space: nowrap;
+  text-align: center;
+  box-sizing: border-box;
 }
 
 .power-capsule:active {
@@ -1235,11 +1248,11 @@ body.theme-dark .seg-btn:hover {
 }
 
 .probe-cards-grid.compact-row .probe-header {
-  flex: 0 1 180px;
+  flex: 0 1 240px;
   width: auto;
-  min-width: 130px;
-  max-width: 220px;
-  overflow: hidden;
+  min-width: 170px;
+  max-width: 270px;
+  overflow: visible;
 }
 
 .probe-cards-grid.compact-row .probe-metrics-box {
