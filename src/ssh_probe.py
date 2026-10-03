@@ -18,6 +18,36 @@ except ImportError:
 
 logger = logging.getLogger("ssh_probe")
 
+def _enable_legacy_ssh_algorithms():
+    """
+    Paramiko 3.0+ 默认禁用了 ssh-rsa 与部分旧版 Diffie-Hellman 密钥交换算法。
+    为了无缝兼容各类精简版嵌入式环境（如 OpenWrt/路由器/BMC 上的 Dropbear SSH、老旧 Linux 发行版及交换机），
+    在此主动补充注册 ssh-rsa、ssh-dss 算法与 legacy kex。
+    """
+    if not paramiko:
+        return
+    try:
+        from paramiko.transport import Transport
+        keys = list(Transport._preferred_keys)
+        for k in ('ssh-rsa', 'ssh-dss'):
+            if k not in keys:
+                keys.append(k)
+        Transport._preferred_keys = tuple(keys)
+
+        kex = list(Transport._preferred_kex)
+        for x in ('diffie-hellman-group14-sha1', 'diffie-hellman-group1-sha1', 'diffie-hellman-group-exchange-sha1'):
+            if x not in kex:
+                kex.append(x)
+        Transport._preferred_kex = tuple(kex)
+
+        # 静音 paramiko 内部的底层调试信息，避免轮询底噪刷屏
+        logging.getLogger("paramiko").setLevel(logging.WARNING)
+        logging.getLogger("paramiko.transport").setLevel(logging.WARNING)
+    except Exception as e:
+        logger.debug(f"enable_legacy_ssh_algorithms error: {e}")
+
+_enable_legacy_ssh_algorithms()
+
 LINUX_PROBE_SCRIPT = r"""
 if command -v python3 >/dev/null 2>&1; then
   PYCMD="python3"
