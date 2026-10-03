@@ -442,7 +442,7 @@ class ConfigManager:
             return fallback
         val = self.config.get("logging", key)
         if key == "log_debug_mode":
-            return val in ("1", "true", "True")
+            return str(val).strip().lower() in ("1", "true", "yes", "on")
         if key == "log_retention_days":
             try:
                 return int(val)
@@ -455,6 +455,10 @@ class ConfigManager:
             self.config.add_section("logging")
         if isinstance(value, bool):
             val_str = "1" if value else "0"
+        elif str(value).strip().lower() in ("1", "true", "yes", "on"):
+            val_str = "1"
+        elif str(value).strip().lower() in ("0", "false", "no", "off"):
+            val_str = "0"
         else:
             val_str = str(value)
         self.config.set("logging", key, val_str)

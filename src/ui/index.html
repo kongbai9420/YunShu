@@ -1187,13 +1187,13 @@
             </div>
             <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
               <!-- 调试模式开关切换 -->
-              <label class="apple-switch-label" style="display:inline-flex; align-items:center; gap:8px; cursor:pointer; background:var(--surface-secondary); padding:4px 10px; border-radius:9999px; border:1px solid var(--border-subtle);" title="开启调试模式后，日志面板将实时显示包括 INFO/DEBUG 在内的所有系统日志">
-                <span style="font-size:12px; font-weight:600; color:var(--text-primary);">🐞 调试模式</span>
+              <div id="logDebugSwitchContainer" style="display:inline-flex; align-items:center; gap:8px; cursor:pointer; background:var(--surface-secondary); padding:4px 10px; border-radius:9999px; border:1px solid var(--border-subtle);" title="开启调试模式后，日志面板将实时显示包括重要事件与报错在内的详细日志">
+                <span id="logDebugSwitchLabel" style="font-size:12px; font-weight:600; color:var(--text-primary); user-select:none;">🐞 调试模式</span>
                 <label class="apple-switch" style="margin:0;">
                   <input type="checkbox" id="btnToggleLogDebug">
                   <span class="switch-slider"></span>
                 </label>
-              </label>
+              </div>
 
               <!-- 清空日志 -->
               <button class="secondary-btn" id="btnClearLogView" style="font-size:11.5px; padding:4px 10px; border-radius:9999px;">

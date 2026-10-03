@@ -112,7 +112,7 @@ class APIBridge:
         self._config_mgr = config_mgr
         self._ssh_probe_mgr = ssh_probe_mgr
         self._alert_engine = alert_engine
-        self._log_mgr = log_mgr
+        self._log_mgr = log_mgr or (LogManager.get_instance(config_mgr) if config_mgr else LogManager.get_instance())
         self._window = None
         self._is_maximized = False
         self._node_uptime_tracker = {}
@@ -1087,11 +1087,17 @@ class APIBridge:
 
     def set_log_debug_mode(self, enabled):
         try:
+            is_enabled = bool(enabled)
+            if isinstance(enabled, str):
+                is_enabled = enabled.strip().lower() in ("1", "true", "yes", "on")
             if self._log_mgr:
-                self._log_mgr.set_debug_mode(enabled)
+                self._log_mgr.set_debug_mode(is_enabled)
             if self._config_mgr:
-                self._config_mgr.set_log_param("log_debug_mode", bool(enabled))
-            return {"success": True, "debug_mode": bool(enabled), "message": f"已{'开启全量调试日志' if enabled else '切换为仅显示错误告警'}"}
+                self._config_mgr.set_log_param("log_debug_mode", is_enabled)
+                if self._config_mgr.config.has_section("ipmi") and self._config_mgr.config.has_option("ipmi", "log_debug_mode"):
+                    self._config_mgr.config.remove_option("ipmi", "log_debug_mode")
+                    self._config_mgr.save()
+            return {"success": True, "debug_mode": is_enabled, "message": f"已{'开启全量调试日志' if is_enabled else '切换为仅显示错误告警'}"}
         except Exception as e:
             return {"success": False, "error": str(e)}
 

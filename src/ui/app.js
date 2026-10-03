@@ -543,6 +543,24 @@ function handleClientSideFallback(method, ...args) {
     };
   }
 
+  if (method === 'set_log_debug_mode') {
+    state.log_debug_mode = !!args[0];
+    return {
+      success: true,
+      debug_mode: state.log_debug_mode,
+      message: `已${state.log_debug_mode ? '开启全量调试日志' : '切换为仅显示错误告警'}`
+    };
+  }
+
+  if (method === 'get_system_logs') {
+    return {
+      success: true,
+      debug_mode: !!state.log_debug_mode,
+      retention_days: 7,
+      logs: state.simulated_logs || []
+    };
+  }
+
   return { success: true, fallback: true };
 }
 
@@ -4493,6 +4511,7 @@ function renderAlertsCenter() {
 // ==========================================
 function initSystemLogsTab() {
   const btnToggleDebug = document.getElementById('btnToggleLogDebug');
+  const logDebugSwitchContainer = document.getElementById('logDebugSwitchContainer');
   const btnRefreshLogs = document.getElementById('btnRefreshLogs');
   const btnClearLogs = document.getElementById('btnClearLogView');
 
@@ -4500,11 +4519,32 @@ function initSystemLogsTab() {
     btnToggleDebug.addEventListener('change', async (e) => {
       const enabled = e.target.checked;
       showToast(`正在切换日志模式: ${enabled ? '全量调试模式' : '标准报错模式'}...`, 'info');
-      const res = await callApi('set_log_debug_mode', enabled);
-      if (res && res.success) {
-        showToast(res.message, 'success');
-        updateLogViewUI(enabled);
-        await refreshSystemLogs(true);
+      try {
+        const res = await callApi('set_log_debug_mode', enabled);
+        if (res && res.success) {
+          showToast(res.message, 'success');
+          updateLogViewUI(res.debug_mode !== undefined ? !!res.debug_mode : enabled);
+          await refreshSystemLogs(true);
+        } else {
+          btnToggleDebug.checked = !enabled;
+          updateLogViewUI(!enabled);
+          showToast(res?.error || res?.message || '日志模式切换失败', 'error');
+        }
+      } catch (err) {
+        btnToggleDebug.checked = !enabled;
+        updateLogViewUI(!enabled);
+        showToast(`切换日志模式异常: ${err}`, 'error');
+      }
+    });
+  }
+
+  if (logDebugSwitchContainer) {
+    logDebugSwitchContainer.addEventListener('click', (e) => {
+      // Avoid handling if user clicked directly on the checkbox or its slider
+      if (e.target.id === 'btnToggleLogDebug' || e.target.closest('.apple-switch')) return;
+      if (btnToggleDebug) {
+        btnToggleDebug.checked = !btnToggleDebug.checked;
+        btnToggleDebug.dispatchEvent(new Event('change'));
       }
     });
   }

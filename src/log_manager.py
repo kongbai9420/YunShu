@@ -173,12 +173,17 @@ class LogManager:
     def set_debug_mode(self, enabled: bool):
         self.debug_mode = bool(enabled)
         if self.config_mgr:
-            self.config_mgr.set("log_debug_mode", self.debug_mode)
+            self.config_mgr.set_log_param("log_debug_mode", self.debug_mode)
+            # 清理历史遗留的 ipmi 节点中的 log_debug_mode
+            if self.config_mgr.config.has_section("ipmi") and self.config_mgr.config.has_option("ipmi", "log_debug_mode"):
+                self.config_mgr.config.remove_option("ipmi", "log_debug_mode")
             self.config_mgr.save()
 
     def get_debug_mode(self) -> bool:
         if self.config_mgr:
-            return bool(self.config_mgr.get("log_debug_mode", False))
+            val = self.config_mgr.get_log_param("log_debug_mode", None)
+            if val is not None:
+                return bool(val)
         return self.debug_mode
 
     def get_logs(self, limit=300) -> List[Dict[str, Any]]:
