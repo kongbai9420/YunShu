@@ -7,9 +7,9 @@ if ! command -v python3 &> /dev/null; then
     exit 1
 fi
 
-if ! python3 -c "import webview" &> /dev/null; then
-    echo "正在安装必要的 GUI 组件库 (pywebview, bottle)..."
-    python3 -m pip install pywebview bottle
+if ! python3 -c "import webview, paramiko" &> /dev/null; then
+    echo "正在安装必要的组件库 (pywebview, bottle, paramiko, cryptography)..."
+    python3 -m pip install -r requirements.txt || python3 -m pip install pywebview bottle paramiko cryptography
 fi
 
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
