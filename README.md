@@ -216,6 +216,21 @@ webhook_url = https://oapi.dingtalk.com/robot/send?access_token=...
 
 ---
 
+## 💖 致谢与参考开源项目 (Credits & Acknowledgements)
+
+本项目在架构设计与开发过程中，参考并借鉴了以下优秀的开源社区项目与标准，特此致谢：
+
+1. **外部多渠道消息通知引擎**：
+   - [caronc/apprise](https://github.com/caronc/apprise) —— 极富盛名的通用多协议通知推送中枢架构；
+   - [TommyMerlin/ANotify](https://github.com/TommyMerlin/ANotify) —— 优秀轻量的多平台聚合推送实现，为本项目的企业微信、钉钉、飞书、Server酱、Bark、PushPlus 消息推送模块提供了成熟的设计参考。
+2. **底层硬件与带外交互**：
+   - [ipmitool](https://github.com/ipmitool/ipmitool) —— 经典的 IPMI 2.0 与 DCMI 规范底层命令行工具；
+   - [Paramiko](https://github.com/paramiko/paramiko) —— 稳健的 Python SSHv2 协议实现，支撑了本项目免 Agent 的宿主机无侵入探针管道。
+3. **原生界面容器**：
+   - [pywebview](https://github.com/r0x0r/pywebview) —— 轻量跨平台的 Web 视图原生 GUI 引擎。
+
+---
+
 ## 📄 开源许可证
 
 本项目基于 [MIT License](LICENSE) 协议开源。欢迎提交 Issue 与 Pull Request 共同完善多品牌服务器运维体验！
