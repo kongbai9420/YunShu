@@ -306,7 +306,7 @@ class ConfigManager:
             "id": new_id,
             "name": name.strip() or f"{brand_val.upper()} 硬件节点 ({ip})",
             "ip": ip.strip() or "192.168.1.1",
-            "user": user.strip() or "root",
+            "user": user.strip() if user else "",
             "password": password or "",
             "model": model.strip() or ("Dell PowerEdge" if brand_val == "dell" else f"{brand_val.upper()} Server"),
             "brand": brand_val,

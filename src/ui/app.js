@@ -610,9 +610,9 @@ function triggerOpenAddHardwareNodeModal() {
   const serialEl = document.getElementById('srvFormSerial');
   if (serialEl) serialEl.value = '';
   const srvIp = document.getElementById('srvFormIp');
-  if (srvIp) srvIp.value = '192.168.1.1';
+  if (srvIp) srvIp.value = '';
   const srvUser = document.getElementById('srvFormUser');
-  if (srvUser) srvUser.value = 'root';
+  if (srvUser) srvUser.value = '';
   const srvPass = document.getElementById('srvFormPassword');
   if (srvPass) srvPass.value = '';
   openHardwareNodeModal();
@@ -3605,11 +3605,15 @@ function initServerClusterManagement() {
   if (btnAutoProbe) {
     btnAutoProbe.addEventListener('click', async () => {
       const ip = document.getElementById('srvFormIp').value.trim();
-      const user = document.getElementById('srvFormUser').value.trim() || 'root';
+      const user = document.getElementById('srvFormUser').value.trim();
       const password = document.getElementById('srvFormPassword').value;
 
       if (!ip) {
         showToast('请先输入 BMC / iDRAC IP 地址', 'error');
+        return;
+      }
+      if (!user) {
+        showToast('请先输入 IPMI 用户名', 'warning');
         return;
       }
 
@@ -3790,11 +3794,15 @@ function initServerClusterManagement() {
     const model = document.getElementById('srvFormModel').value;
     const serial = document.getElementById('srvFormSerial')?.value || '';
     const ip = document.getElementById('srvFormIp').value;
-    const user = document.getElementById('srvFormUser').value;
+    const user = document.getElementById('srvFormUser').value.trim();
     const password = document.getElementById('srvFormPassword').value;
 
     if (!ip.trim()) {
       showToast('请输入有效的 BMC / iDRAC IP 地址', 'error');
+      return;
+    }
+    if (!user) {
+      showToast('请输入 IPMI 用户名', 'warning');
       return;
     }
 
@@ -3863,11 +3871,11 @@ function renderServerFormSubsystems() {
         </div>
         <div>
           <label style="font-size:10.5px; color:var(--text-tertiary); display:block; margin-bottom:2px;">SSH 账户</label>
-          <input type="text" class="apple-input" style="font-size:11.5px; padding:4px 8px;" value="${sub.username || 'root'}" placeholder="root" onchange="updateSubsystemField(${idx}, 'username', this.value)">
+          <input type="text" class="apple-input" style="font-size:11.5px; padding:4px 8px;" value="${(sub.username !== undefined && sub.username !== null) ? sub.username : ''}" placeholder="如 admin / root" autocomplete="off" onchange="updateSubsystemField(${idx}, 'username', this.value)">
         </div>
         <div>
           <label style="font-size:10.5px; color:var(--text-tertiary); display:block; margin-bottom:2px;">SSH 密码</label>
-          <input type="password" class="apple-input" style="font-size:11.5px; padding:4px 8px;" value="${sub.password || ''}" placeholder="留空为无密码" onchange="updateSubsystemField(${idx}, 'password', this.value)">
+          <input type="password" class="apple-input" style="font-size:11.5px; padding:4px 8px;" value="${sub.password || ''}" placeholder="留空为无密码" autocomplete="new-password" onchange="updateSubsystemField(${idx}, 'password', this.value)">
         </div>
       </div>
       <div id="subRowStatus_${idx}" style="font-size:11px; margin-top:5px; display:none;"></div>
@@ -4233,7 +4241,7 @@ window.editServerModal = function(srvId) {
   const serialEl = document.getElementById('srvFormSerial');
   if (serialEl) serialEl.value = srv.serial || '';
   document.getElementById('srvFormIp').value = srv.ip;
-  document.getElementById('srvFormUser').value = srv.user;
+  document.getElementById('srvFormUser').value = (srv.user !== undefined && srv.user !== null) ? srv.user : '';
   document.getElementById('srvFormPassword').value = srv.password;
 
   openHardwareNodeModal();
