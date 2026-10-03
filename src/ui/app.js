@@ -602,6 +602,38 @@ function triggerOpenAddHardwareNodeModal() {
   openHardwareNodeModal();
 }
 
+function triggerOpenAddSystemServerModal() {
+  editingSysServerId = null;
+  const formTitle = document.getElementById('sysServerFormTitle');
+  if (formTitle) formTitle.textContent = '添加系统服务器 (SSH 探针)';
+  const srvName = document.getElementById('sysSrvFormName');
+  if (srvName) srvName.value = '';
+  const srvHost = document.getElementById('sysSrvFormHost');
+  if (srvHost) srvHost.value = '192.168.1.100';
+  const srvPort = document.getElementById('sysSrvFormPort');
+  if (srvPort) srvPort.value = '22';
+  const srvUser = document.getElementById('sysSrvFormUser');
+  if (srvUser) srvUser.value = 'root';
+  const srvPass = document.getElementById('sysSrvFormPassword');
+  if (srvPass) srvPass.value = '';
+  const osEl = document.getElementById('sysSrvFormOsName');
+  if (osEl) osEl.value = '';
+
+  // Populate nodes select
+  const nodeSel = document.getElementById('sysSrvFormNodeSelect');
+  if (nodeSel) {
+    let opts = '<option value="">-- 独立服务器 (不绑定任何硬件节点) --</option>';
+    (state.servers || []).forEach(n => {
+      opts += `<option value="${n.id}">🖥️ 绑定到: ${n.name} (${n.ip})</option>`;
+    });
+    nodeSel.innerHTML = opts;
+  }
+
+  const testResBox = document.getElementById('sysSrvTestResultBox');
+  if (testResBox) testResBox.style.display = 'none';
+  openSystemServerModal();
+}
+
 // Window Traffic Lights & Controls
 function initWindowControls() {
   const btnClose = document.getElementById('btnWindowClose');
@@ -3659,30 +3691,9 @@ function initServerClusterManagement() {
 
   const btnOpenAddSys = document.getElementById('btnOpenAddSystemServerModal');
   if (btnOpenAddSys) {
-    btnOpenAddSys.addEventListener('click', () => {
-      editingSysServerId = null;
-      document.getElementById('sysServerFormTitle').textContent = '添加系统服务器 (SSH 探针)';
-      document.getElementById('sysSrvFormName').value = '';
-      document.getElementById('sysSrvFormHost').value = '192.168.1.100';
-      document.getElementById('sysSrvFormPort').value = '22';
-      document.getElementById('sysSrvFormUser').value = 'root';
-      document.getElementById('sysSrvFormPassword').value = '';
-      if (document.getElementById('sysSrvFormOsName')) {
-        document.getElementById('sysSrvFormOsName').value = '';
-      }
-
-      // Populate nodes select
-      const nodeSel = document.getElementById('sysSrvFormNodeSelect');
-      if (nodeSel) {
-        let opts = '<option value="">-- 独立服务器 (不绑定任何硬件节点) --</option>';
-        state.servers.forEach(n => {
-          opts += `<option value="${n.id}">🖥️ 绑定到: ${n.name} (${n.ip})</option>`;
-        });
-        nodeSel.innerHTML = opts;
-      }
-
-      document.getElementById('sysSrvTestResultBox').style.display = 'none';
-      openSystemServerModal();
+    btnOpenAddSys.addEventListener('click', (e) => {
+      e.preventDefault();
+      triggerOpenAddSystemServerModal();
     });
   }
 
@@ -4079,7 +4090,8 @@ window.editSystemServerModal = function(sysId) {
     nodeSel.innerHTML = opts;
   }
 
-  document.getElementById('sysSrvTestResultBox').style.display = 'none';
+  const testResBox = document.getElementById('sysSrvTestResultBox');
+  if (testResBox) testResBox.style.display = 'none';
   openSystemServerModal();
 };
 
