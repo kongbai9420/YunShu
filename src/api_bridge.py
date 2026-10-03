@@ -739,6 +739,10 @@ class APIBridge:
             logger.error(f"control_server_power error: {e}")
             return {"success": False, "error": f"电源控制执行异常: {str(e)}"}
 
+    def control_power(self, action, srv_id):
+        """兼容 Web 与前端各版本调用的电源控制别名方法: control_power(action, srv_id)"""
+        return self.control_server_power(srv_id, action)
+
     def minimize_window(self):
         if self._window:
             try:

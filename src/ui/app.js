@@ -526,8 +526,9 @@ function handleClientSideFallback(method, ...args) {
     return { success: true, message: '系统服务器已移除' };
   }
 
-  if (method === 'control_server_power') {
-    const [srvId, action] = args;
+  if (method === 'control_server_power' || method === 'control_power') {
+    const srvId = method === 'control_power' ? args[1] : args[0];
+    const action = method === 'control_power' ? args[0] : args[1];
     const srv = (state.servers || []).find(s => s.id === srvId);
     const srvName = srv ? srv.name : '服务器';
     const actionMap = {
