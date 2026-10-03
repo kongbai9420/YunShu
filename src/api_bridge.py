@@ -404,8 +404,9 @@ class APIBridge:
                 port=int(port or 22),
                 username=user.strip(),
                 password=password or None,
-                timeout=5.0,
-                banner_timeout=5.0,
+                timeout=6.0,
+                banner_timeout=12.0,
+                auth_timeout=8.0,
                 look_for_keys=False,
                 allow_agent=False
             )

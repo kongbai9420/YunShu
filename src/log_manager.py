@@ -39,27 +39,38 @@ class SmartLogFilter(logging.Filter):
         "ciphers",
         "initial fast ping",
         "probe loop tick",
-        "fast cwd"
+        "fast cwd",
+        "error reading ssh protocol banner",
+        "incompatible ssh peer",
+        "eof in transport thread"
     ]
 
     def filter(self, record: logging.LogRecord) -> bool:
-        # 1. 任何警告、错误及严重故障，100% 绝对保留
+        # 1. 过滤第三方库内部输出的冗余 Traceback 或瞬态中断堆栈（如 paramiko 的 _check_banner EOFError）
+        # 此类网络握手瞬态异常由业务层 (ssh_probe) 汇总为简洁友好的错误提示，不直接在底层打印多行 Python 堆栈刷屏
+        logger_name = (record.name or "").lower()
+        msg = (record.getMessage() or "").lower()
+
+        if "paramiko" in logger_name:
+            for kw in ("error reading ssh protocol banner", "incompatible ssh peer", "traceback (most recent call last)"):
+                if kw in msg:
+                    return False
+
+        # 2. 任何警告、错误及严重故障，100% 绝对保留
         if record.levelno >= logging.WARNING:
             return True
 
-        # 2. 静音纯噪音第三方库的 INFO / DEBUG
-        logger_name = (record.name or "").lower()
+        # 3. 静音纯噪音第三方库的 INFO / DEBUG
         for noisy in self.NOISY_LOGGERS:
             if logger_name == noisy or logger_name.startswith(noisy + "."):
                 return False
 
-        # 3. 过滤无报错周期性轮询的重复底噪消息
-        msg = (record.getMessage() or "").lower()
+        # 4. 过滤无报错周期性轮询的重复底噪消息
         for kw in self.NOISY_KEYWORDS:
             if kw in msg:
                 return False
 
-        # 4. 其余重要生命周期与操作日志保留
+        # 5. 其余重要生命周期与操作日志保留
         return True
 
 
