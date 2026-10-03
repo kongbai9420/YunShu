@@ -382,7 +382,7 @@ class ConfigManager:
             "name": name.strip() or f"系统服务器 ({host})",
             "host": host.strip() or "127.0.0.1",
             "port": int(port or 22),
-            "username": username.strip() or "root",
+            "username": username.strip() if username else "",
             "password": password or "",
             "node_id": (node_id or "").strip(),
             "os_name": (os_name or "").strip(),

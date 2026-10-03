@@ -625,11 +625,11 @@ function triggerOpenAddSystemServerModal() {
   const srvName = document.getElementById('sysSrvFormName');
   if (srvName) srvName.value = '';
   const srvHost = document.getElementById('sysSrvFormHost');
-  if (srvHost) srvHost.value = '192.168.1.100';
+  if (srvHost) srvHost.value = '';
   const srvPort = document.getElementById('sysSrvFormPort');
   if (srvPort) srvPort.value = '22';
   const srvUser = document.getElementById('sysSrvFormUser');
-  if (srvUser) srvUser.value = 'root';
+  if (srvUser) srvUser.value = '';
   const srvPass = document.getElementById('sysSrvFormPassword');
   if (srvPass) srvPass.value = '';
   const osEl = document.getElementById('sysSrvFormOsName');
@@ -3661,11 +3661,15 @@ function initServerClusterManagement() {
     btnAutoProbeOs.addEventListener('click', async () => {
       const host = document.getElementById('sysSrvFormHost').value.trim();
       const port = document.getElementById('sysSrvFormPort').value.trim() || 22;
-      const user = document.getElementById('sysSrvFormUser').value.trim() || 'root';
+      const user = document.getElementById('sysSrvFormUser').value.trim();
       const password = document.getElementById('sysSrvFormPassword').value;
 
       if (!host) {
         showToast('请先输入 SSH 主机 IP / 域名', 'error');
+        return;
+      }
+      if (!user) {
+        showToast('请先输入 SSH 登录账号', 'warning');
         return;
       }
 
@@ -3736,13 +3740,17 @@ function initServerClusterManagement() {
     const name = document.getElementById('sysSrvFormName').value.trim();
     const host = document.getElementById('sysSrvFormHost').value.trim();
     const port = parseInt(document.getElementById('sysSrvFormPort').value || 22, 10);
-    const username = document.getElementById('sysSrvFormUser').value.trim() || 'root';
+    const username = document.getElementById('sysSrvFormUser').value.trim();
     const password = document.getElementById('sysSrvFormPassword').value;
     const node_id = document.getElementById('sysSrvFormNodeSelect').value;
     const os_name = document.getElementById('sysSrvFormOsName')?.value?.trim() || '';
 
     if (!host) {
       showToast('请输入有效的主机 IP 地址', 'error');
+      return;
+    }
+    if (!username) {
+      showToast('请输入 SSH 登录账号', 'warning');
       return;
     }
 
@@ -4103,7 +4111,7 @@ window.editSystemServerModal = function(sysId) {
   document.getElementById('sysSrvFormName').value = sys.name || '';
   document.getElementById('sysSrvFormHost').value = sys.host || '';
   document.getElementById('sysSrvFormPort').value = sys.port || 22;
-  document.getElementById('sysSrvFormUser').value = sys.username || 'root';
+  document.getElementById('sysSrvFormUser').value = (sys.username !== undefined && sys.username !== null) ? sys.username : '';
   document.getElementById('sysSrvFormPassword').value = sys.password || '';
   if (document.getElementById('sysSrvFormOsName')) {
     document.getElementById('sysSrvFormOsName').value = sys.os_name || '';

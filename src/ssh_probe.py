@@ -261,7 +261,7 @@ class SystemServerWorker:
         self.name = srv_info.get("name", "Linux 服务器")
         self.host = srv_info.get("host", "127.0.0.1")
         self.port = int(srv_info.get("port", 22))
-        self.username = srv_info.get("username", "root")
+        self.username = srv_info.get("username", "") or "root"
         self.password = srv_info.get("password", "")
         self.node_id = srv_info.get("node_id", "")  # Optional bound hardware node
         self.os_name = srv_info.get("os_name", "")  # Persistent OS name or custom

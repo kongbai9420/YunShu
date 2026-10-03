@@ -229,7 +229,9 @@ class APIBridge:
                         "disk_used_gb": disk_u,
                         "disk_total_gb": disk_tot,
                         "uptime_sec": 86400 * 24 + 3600 * 5,
-                        "hostname": "pve-cluster-node1" if is_bound else "app-server-standalone"
+                        "hostname": "pve-cluster-node1" if is_bound else "app-server-standalone",
+                        "username": s.get("username", ""),
+                        "password": s.get("password", "")
                     }
                     final_system_servers.append(simulated_entry)
                 else:
@@ -238,6 +240,8 @@ class APIBridge:
                         entry = dict(real_tel)
                         entry["node_id"] = s.get("node_id", "")
                         entry["name"] = s.get("name", entry.get("name", ""))
+                        entry["username"] = s.get("username", "")
+                        entry["password"] = s.get("password", "")
                         entry["os_name"] = configured_os or entry.get("os_name", "Linux OS")
                         entry["latency_ms"] = real_tel.get("latency_ms", 10)
                         final_system_servers.append(entry)
@@ -253,6 +257,8 @@ class APIBridge:
                             "name": s.get("name"),
                             "host": s.get("host"),
                             "port": s.get("port", 22),
+                            "username": s.get("username", ""),
+                            "password": s.get("password", ""),
                             "node_id": s.get("node_id", ""),
                             "os_name": configured_os or (real_tel.get("os_name") if real_tel else "") or "Linux OS",
                             "connected": False,
