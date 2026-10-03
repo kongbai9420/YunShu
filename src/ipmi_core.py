@@ -1336,6 +1336,57 @@ class IPMICore:
                     self.last_sensor_data["power"] = self.cluster_telemetry[srv_id]["power"]
                     self.last_sensor_data["error_msg"] = ""
 
+    def control_chassis_power(self, action: str, server_override=None):
+        """
+        IPMI 机箱电源控制 (chassis power)
+        action: 'status' | 'on' | 'off' | 'cycle' | 'reset' | 'soft'
+        """
+        valid_actions = {
+            "on": "开机 (Power On)",
+            "off": "强制断电关机 (Power Off)",
+            "soft": "ACPI 安全软关机 (Soft Shutdown)",
+            "reset": "硬件强制重启 (Chassis Reset)",
+            "cycle": "冷重启 (Power Cycle)",
+            "status": "查询电源状态"
+        }
+        if action not in valid_actions:
+            return {"success": False, "error": f"不支持的电源操作: {action}"}
+
+        target_srv = server_override if server_override else self.config_mgr.get_active_server()
+        srv_name = target_srv.get("name", target_srv.get("ip", "服务器"))
+        action_desc = valid_actions[action]
+
+        if self.demo_mode:
+            logger.info(f"[演示模式] 模拟向 [{srv_name}] 下发 IPMI 电源指令 [{action_desc}]")
+            return {
+                "success": True,
+                "action": action,
+                "message": f"演示模式：已成功向 [{srv_name}] 模拟发送 IPMI 电源指令 [{action_desc}]",
+                "output": f"Chassis Power Control: {action.capitalize()}"
+            }
+
+        # 执行 ipmitool chassis power <action>
+        # 超时设置 8 秒，足以覆盖 RMCP+ 握手与响应
+        success, out, latency = self.execute_ipmitool(["chassis", "power", action], timeout=8.0, server_override=target_srv)
+
+        if success:
+            logger.info(f"IPMI 电源管理: 成功向 [{srv_name}] 发送指令 [{action_desc}], 输出: {out.strip()}")
+            return {
+                "success": True,
+                "action": action,
+                "message": f"[{srv_name}] IPMI 电源指令 [{action_desc}] 发送成功: {out.strip()}",
+                "output": out.strip(),
+                "latency_ms": latency
+            }
+        else:
+            logger.error(f"IPMI 电源管理失败: 向 [{srv_name}] 发送指令 [{action_desc}] 失败: {out.strip()}")
+            return {
+                "success": False,
+                "action": action,
+                "error": f"[{srv_name}] IPMI 电源操作 [{action_desc}] 失败: {out.strip()}",
+                "latency_ms": latency
+            }
+
     def ping_single_node_fast(self, srv):
         """轻量级极速测活（仅需 50~150ms）：通过 chassis power status 或 Raw 0x06 0x01 进行秒级连通性握手"""
         srv_id = srv.get("id")

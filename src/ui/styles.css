@@ -912,6 +912,83 @@ body.theme-dark .seg-btn:hover {
   color: var(--system-orange);
 }
 
+/* Power Control Micro Capsules Bar (Apple HIG 精致四胶囊开关机集群) */
+.power-capsules-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.power-capsule {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5px 5.5px;
+  font-size: 9.5px;
+  font-weight: 600;
+  line-height: 12px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
+  background: var(--surface-secondary);
+  font-family: inherit;
+}
+
+.power-capsule:active {
+  transform: scale(0.92);
+}
+
+.power-capsule.capsule-pwr-on {
+  background: rgba(52, 199, 89, 0.12);
+  color: var(--system-green);
+  border-color: rgba(52, 199, 89, 0.28);
+}
+.power-capsule.capsule-pwr-on:hover {
+  background: var(--system-green);
+  color: #ffffff;
+  border-color: var(--system-green);
+  box-shadow: 0 2px 6px rgba(52, 199, 89, 0.3);
+}
+
+.power-capsule.capsule-pwr-soft {
+  background: rgba(255, 149, 0, 0.12);
+  color: var(--system-orange);
+  border-color: rgba(255, 149, 0, 0.28);
+}
+.power-capsule.capsule-pwr-soft:hover {
+  background: var(--system-orange);
+  color: #ffffff;
+  border-color: var(--system-orange);
+  box-shadow: 0 2px 6px rgba(255, 149, 0, 0.3);
+}
+
+.power-capsule.capsule-pwr-reset {
+  background: rgba(0, 122, 255, 0.12);
+  color: var(--accent-blue);
+  border-color: rgba(0, 122, 255, 0.28);
+}
+.power-capsule.capsule-pwr-reset:hover {
+  background: var(--accent-blue);
+  color: #ffffff;
+  border-color: var(--accent-blue);
+  box-shadow: 0 2px 6px rgba(0, 122, 255, 0.3);
+}
+
+.power-capsule.capsule-pwr-off {
+  background: rgba(255, 59, 48, 0.12);
+  color: var(--system-red);
+  border-color: rgba(255, 59, 48, 0.28);
+}
+.power-capsule.capsule-pwr-off:hover {
+  background: var(--system-red);
+  color: #ffffff;
+  border-color: var(--system-red);
+  box-shadow: 0 2px 6px rgba(255, 59, 48, 0.3);
+}
+
 /* Probe Metrics Area & Top Bar (在线/延时放置在数值UI上方，不占整体行比) */
 .probe-metrics-box {
   display: flex;

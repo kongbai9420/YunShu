@@ -722,6 +722,17 @@ class APIBridge:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
+    def control_server_power(self, srv_id, action):
+        """对指定硬件节点执行 IPMI 电源控制 (chassis power on/off/soft/reset/cycle)"""
+        try:
+            srv = next((s for s in self._config_mgr.get_servers() if s.get("id") == srv_id), None)
+            if not srv:
+                return {"success": False, "error": f"未找到 ID 为 [{srv_id}] 的硬件节点"}
+            return self._ipmi_core.control_chassis_power(action, server_override=srv)
+        except Exception as e:
+            logger.error(f"control_server_power error: {e}")
+            return {"success": False, "error": f"电源控制执行异常: {str(e)}"}
+
     def minimize_window(self):
         if self._window:
             try:
