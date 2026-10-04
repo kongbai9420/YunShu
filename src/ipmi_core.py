@@ -944,11 +944,28 @@ class IPMICore:
             }, lat
         return False, {}, lat
 
-    def parse_sensor_output(self, raw_output):
+    def parse_sensor_output(self, raw_output, server_override=None):
         all_sensors = []
         cpu_temps = []
         inlet_temp = None
         fans = []
+
+        # 智能匹配风扇满载基准转速 (Max RPM Profile):
+        # 1. 1U 机型 (R640, R630, R620): 40mm 高压双对转风扇，满速通常为 24,000 ~ 28,000 RPM
+        # 2. 14G/15G 2U 机型 (R740, R740xd, R750 等): 标配风扇 ~15,000 RPM，带 GPU/NVMe 金标高风量风扇满速高达 19,000 ~ 21,600 RPM
+        # 3. 12G/13G 2U 机型 (R730, R730xd, R720 等): 标配风扇 11,500 ~ 12,500 RPM，银标高性能风扇约 15,500 RPM
+        model_str = (server_override.get("model", "") if server_override else "").upper()
+        name_str = (server_override.get("name", "") if server_override else "").upper()
+        full_id_str = f"{model_str} {name_str}"
+
+        if any(m in full_id_str for m in ("R640", "R650", "R630", "R620", "R6515")):
+            base_max_rpm = 24000.0
+        elif any(m in full_id_str for m in ("R740", "R740XD", "R750", "R7525", "R7425", "R840", "R940", "14G", "15G")):
+            base_max_rpm = 19500.0
+        elif any(m in full_id_str for m in ("R730", "R720", "R710", "12G", "13G")):
+            base_max_rpm = 12500.0
+        else:
+            base_max_rpm = 15000.0
 
         lines = raw_output.strip().splitlines()
         for line in lines:
@@ -1048,7 +1065,9 @@ class IPMICore:
                 try:
                     rpm_val = int(float(val_str))
                     if rpm_val >= 0:
-                        pct = min(100, max(0, int((rpm_val / 12500.0) * 100)))
+                        # 动态自适应基准：若当前转速超过预设满速，平滑扩展上限（留 5% 裕量），避免百分比虚高爆表或卡死 100%
+                        fan_ceiling = max(base_max_rpm, float(rpm_val) * 1.05)
+                        pct = min(100, max(0, int((rpm_val / fan_ceiling) * 100)))
                         fans.append({
                             "name": name,
                             "rpm": rpm_val,
@@ -1215,7 +1234,7 @@ class IPMICore:
 
         # 仅在命令本身网络成功返回，但极端特殊主板未导出温度风扇时，静默探测备用 sensor
         if succ and out:
-            temp_parsed = self.parse_sensor_output(out)
+            temp_parsed = self.parse_sensor_output(out, server_override=srv)
             if not temp_parsed.get("fans") and not temp_parsed.get("cpu_temps"):
                 succ_sensor, out_sensor, lat_sensor = self.execute_ipmitool(["sensor"], timeout=max(8.0, srv_to + 4.0), server_override=srv)
                 if succ_sensor and out_sensor:
@@ -1271,7 +1290,7 @@ class IPMICore:
                 return
             else:
                 self._node_fail_counts[srv_id] = 0
-                parsed = self.parse_sensor_output(out)
+                parsed = self.parse_sensor_output(out, server_override=srv)
                 avg_rpm = int(sum([f["rpm"] for f in parsed["fans"]]) / len(parsed["fans"])) if parsed["fans"] else 0
                 power_data = parsed.get("power", {
                     "total_watts": None,
@@ -1389,6 +1408,62 @@ class IPMICore:
                 "error": f"[{srv_name}] IPMI 电源操作 [{action_desc}] 失败: {out.strip()}",
                 "latency_ms": latency
             }
+
+    def control_dell_pcie_fan_response(self, action: str = "status", server_override=None):
+        """
+        控制戴尔 13G/14G/15G (如 R730, R740, R750) 第三方 PCIe 卡强制风扇散热响应:
+        action: 'status' (查询) | 'disable' (关闭狂转，恢复静音) | 'enable' (开启默认保护)
+        """
+        target_srv = server_override if server_override else self.config_mgr.get_active_server()
+        srv_name = target_srv.get("name", target_srv.get("ip", "服务器"))
+
+        if self.demo_mode:
+            return {
+                "success": True,
+                "action": action,
+                "pcie_fan_response": "disabled" if action == "disable" else "enabled",
+                "message": f"[演示模式] [{srv_name}] 第三方 PCIe 散热响应操作 [{action}] 成功"
+            }
+
+        if action == "status":
+            cmd = ["raw", "0x30", "0xce", "0x01", "0x16", "0x05", "0x00", "0x00", "0x00"]
+            succ, out, lat = self.execute_ipmitool(cmd, timeout=5.0, server_override=target_srv)
+            if succ:
+                out_clean = out.strip().replace(" ", "").lower()
+                is_disabled = out_clean.endswith("00") or out_clean.endswith("1605000000")
+                return {
+                    "success": True,
+                    "action": "status",
+                    "pcie_fan_response": "disabled" if is_disabled else "enabled",
+                    "message": f"[{srv_name}] 第三方 PCIe 散热响应: {'已禁用 (风扇可安静低转)' if is_disabled else '已启用 (插卡后风扇可能强制高转)'}"
+                }
+            return {"success": False, "error": f"查询 PCIe 散热响应失败: {out.strip()}"}
+
+        elif action == "disable":
+            # 禁用第三方 PCIe 卡自动拉高风扇转速 (关闭狂转)
+            cmd = ["raw", "0x30", "0xce", "0x00", "0x16", "0x05", "0x00", "0x00", "0x00", "0x05", "0x00", "0x00", "0x00", "0x00"]
+            succ, out, lat = self.execute_ipmitool(cmd, timeout=5.0, server_override=target_srv)
+            if succ:
+                return {
+                    "success": True,
+                    "action": "disable",
+                    "message": f"[{srv_name}] 已成功禁用第三方 PCIe 风扇加速！R740等机型插非原装卡不再被强制拉高转速"
+                }
+            return {"success": False, "error": f"禁用 PCIe 风扇响应失败: {out.strip()}"}
+
+        elif action == "enable":
+            # 恢复默认散热响应
+            cmd = ["raw", "0x30", "0xce", "0x00", "0x16", "0x05", "0x00", "0x00", "0x00", "0x05", "0x00", "0x00", "0x00", "0x01"]
+            succ, out, lat = self.execute_ipmitool(cmd, timeout=5.0, server_override=target_srv)
+            if succ:
+                return {
+                    "success": True,
+                    "action": "enable",
+                    "message": f"[{srv_name}] 已恢复第三方 PCIe 默认散热响应"
+                }
+            return {"success": False, "error": f"恢复 PCIe 风扇响应失败: {out.strip()}"}
+
+        return {"success": False, "error": f"未知操作: {action}"}
 
     def ping_single_node_fast(self, srv):
         """轻量级极速测活（仅需 50~150ms）：通过 chassis power status 或 Raw 0x06 0x01 进行秒级连通性握手"""

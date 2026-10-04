@@ -744,6 +744,15 @@ class APIBridge:
         """兼容 Web 与前端各版本调用的电源控制别名方法: control_power(action, srv_id)"""
         return self.control_server_power(srv_id, action)
 
+    def control_pcie_fan_response(self, action="status", srv_id=None):
+        """控制戴尔 13G/14G/15G (R730, R740, R750 等) 第三方 PCIe 卡强制散热狂转 (status/disable/enable)"""
+        try:
+            srv = next((s for s in self._config_mgr.get_servers() if s.get("id") == srv_id), None) if srv_id else None
+            return self._ipmi_core.control_dell_pcie_fan_response(action, server_override=srv)
+        except Exception as e:
+            logger.error(f"control_pcie_fan_response error: {e}")
+            return {"success": False, "error": f"PCIe 散热控制异常: {str(e)}"}
+
     def minimize_window(self):
         if self._window:
             try:

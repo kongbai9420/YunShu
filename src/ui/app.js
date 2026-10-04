@@ -3249,6 +3249,19 @@ function initFanMatrix() {
     });
   }
 
+  // 辅助函数: 依据当前激活服务器代际结构智能预估 RPM
+  function getEstimatedFanRpm(pct) {
+    const srv = state.servers.find(s => s.id === state.activeServer?.id) || state.servers[0] || {};
+    const model = ((srv.model || '') + ' ' + (srv.name || '')).toUpperCase();
+    if (model.includes('R640') || model.includes('R650') || model.includes('R630') || model.includes('R620')) {
+      return Math.round(2500 + (pct / 100) * 21500);
+    }
+    if (model.includes('R740') || model.includes('R750') || model.includes('14G') || model.includes('15G')) {
+      return Math.round(2000 + (pct / 100) * 17500);
+    }
+    return Math.round(1200 + (pct / 100) * 11300);
+  }
+
   // 4. 全局风扇滑块与快捷档位联动
   const globalSlider = document.getElementById('tabGlobalFanSlider');
   const globalBadge = document.getElementById('tabGlobalFanValBadge');
@@ -3257,7 +3270,7 @@ function initFanMatrix() {
     globalSlider.addEventListener('input', (e) => {
       const v = parseInt(e.target.value, 10);
       if (globalBadge) globalBadge.textContent = `${v}%`;
-      if (globalRpm) globalRpm.textContent = `约 ${Math.round(1200 + (v / 100) * 11500)} RPM`;
+      if (globalRpm) globalRpm.textContent = `约 ${getEstimatedFanRpm(v)} RPM`;
       // 同时联动各通道默认显示
       for (let i = 0; i < 6; i++) {
         const inp = document.getElementById(`fanInput_${i}`);
@@ -3274,7 +3287,7 @@ function initFanMatrix() {
     if (globalSlider) {
       globalSlider.value = val;
       if (globalBadge) globalBadge.textContent = `${val}%`;
-      if (globalRpm) globalRpm.textContent = `约 ${Math.round(1200 + (val / 100) * 11500)} RPM`;
+      if (globalRpm) globalRpm.textContent = `约 ${getEstimatedFanRpm(val)} RPM`;
     }
     for (let i = 0; i < 6; i++) {
       const inp = document.getElementById(`fanInput_${i}`);
@@ -3295,7 +3308,7 @@ function initFanMatrix() {
       if (globalSlider && document.activeElement !== globalSlider) {
         globalSlider.value = sp;
         if (globalBadge) globalBadge.textContent = `${sp}%`;
-        if (globalRpm) globalRpm.textContent = `约 ${Math.round(1200 + (sp / 100) * 11500)} RPM`;
+        if (globalRpm) globalRpm.textContent = `约 ${getEstimatedFanRpm(sp)} RPM`;
       }
     }
     const modeType = state.config?.ipmi?.manual_mode_type || 'global';
