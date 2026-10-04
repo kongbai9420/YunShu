@@ -4056,9 +4056,14 @@ function renderServerManagementList() {
           'dell': 'Dell',
           'inspur': '浪潮 Inspur',
           'huawei': '华为 Huawei',
-          'supermicro': '超微 Supermicro',
           'lenovo': '联想 Lenovo',
-          'generic': 'IPMI'
+          'hpe': '惠普 HPE',
+          'h3c': '新华三 H3C',
+          'supermicro': '超微',
+          'zte': '中兴 ZTE',
+          'asrock': '华擎 ASRock',
+          'asus': '华硕 ASUS',
+          'generic': '标准 IPMI'
         };
         const brandBadgeText = brandDisplayMap[srv.brand] || (srv.brand ? srv.brand.toUpperCase() : 'Dell');
 

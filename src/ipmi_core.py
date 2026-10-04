@@ -483,7 +483,7 @@ class IPMICore:
 
         # 分析 mc info
         mc_lower = out_mc.lower() if succ_mc else ""
-        if "inspur" in mc_lower or "379" in mc_lower:
+        if "inspur" in mc_lower or "37945" in mc_lower or "379" in mc_lower:
             detected_brand = "inspur"
             detected_brand_name = "Inspur (浪潮)"
         elif "huawei" in mc_lower or "2011" in mc_lower:
@@ -495,6 +495,24 @@ class IPMICore:
         elif "lenovo" in mc_lower or "19046" in mc_lower or "ibm" in mc_lower:
             detected_brand = "lenovo"
             detected_brand_name = "Lenovo (联想)"
+        elif "hp" in mc_lower or "hpe" in mc_lower or "hewlett" in mc_lower or "232" in mc_lower:
+            detected_brand = "hpe"
+            detected_brand_name = "HPE (惠普)"
+        elif "h3c" in mc_lower or "25506" in mc_lower:
+            detected_brand = "h3c"
+            detected_brand_name = "H3C (新华三)"
+        elif "zte" in mc_lower or "3902" in mc_lower or "中兴" in mc_lower:
+            detected_brand = "zte"
+            detected_brand_name = "ZTE (中兴)"
+        elif "sugon" in mc_lower or "dawning" in mc_lower or "39999" in mc_lower:
+            detected_brand = "sugon"
+            detected_brand_name = "Sugon (中科曙光)"
+        elif "asrock" in mc_lower or "asrockrack" in mc_lower:
+            detected_brand = "asrock"
+            detected_brand_name = "ASRock Rack (华擎)"
+        elif "asus" in mc_lower or "asustek" in mc_lower:
+            detected_brand = "asus"
+            detected_brand_name = "ASUS (华硕)"
         elif "dell" in mc_lower or "674" in mc_lower:
             detected_brand = "dell"
             detected_brand_name = "Dell (戴尔)"
@@ -523,6 +541,24 @@ class IPMICore:
                     elif "lenovo" in vl or "ibm" in vl:
                         detected_brand = "lenovo"
                         detected_brand_name = "Lenovo (联想)"
+                    elif "hewlett" in vl or "hpe" in vl or "hp" in vl:
+                        detected_brand = "hpe"
+                        detected_brand_name = "HPE (惠普)"
+                    elif "h3c" in vl:
+                        detected_brand = "h3c"
+                        detected_brand_name = "H3C (新华三)"
+                    elif "zte" in vl or "中兴" in vl:
+                        detected_brand = "zte"
+                        detected_brand_name = "ZTE (中兴)"
+                    elif "sugon" in vl or "dawning" in vl:
+                        detected_brand = "sugon"
+                        detected_brand_name = "Sugon (中科曙光)"
+                    elif "asrock" in vl:
+                        detected_brand = "asrock"
+                        detected_brand_name = "ASRock Rack (华擎)"
+                    elif "asus" in vl:
+                        detected_brand = "asus"
+                        detected_brand_name = "ASUS (华硕)"
                     elif "dell" in vl:
                         detected_brand = "dell"
                         detected_brand_name = "Dell (戴尔)"
@@ -564,62 +600,158 @@ class IPMICore:
             }
 
     def _execute_brand_fan_control(self, srv, cmd_type, speed_percent=25, fan_index=None):
-        """多品牌服务器风扇指令适配驱动 (支持 Dell, 浪潮 Inspur, 华为 Huawei, 超微 Supermicro)"""
+        """全品牌服务器风扇指令适配驱动 (支持 Dell, 浪潮 Inspur, 华为 Huawei, 联想 Lenovo, 惠普 HPE, 华三 H3C, 超微 Supermicro, 中兴 ZTE, 华擎 ASRock, 通用)"""
         brand = (srv.get("brand") or "dell").lower()
-        sp_hex = f"0x{max(0, min(100, int(speed_percent))):02x}"
+        sp_pct = max(0, min(100, int(speed_percent)))
+        sp_hex = f"0x{sp_pct:02x}"
 
-        # 1. 浪潮 (Inspur) M4 / M5 / M6
+        # 1. 浪潮 (Inspur) M4 / M5 / M6 / M7
         if brand == "inspur":
             if cmd_type == "auto":
                 return self.execute_ipmitool(["raw", "0x3a", "0x01", "0x01"], server_override=srv)
             elif cmd_type in ("manual", "set_all"):
-                # 0x3a 0x01 0x00 禁用自动控温；0x3a 0x02 <hex> 设定全局转速
+                # 0x3a 0x01 0x00 禁用自动控温；0x3a 0x02 <hex> 设定全局转速 (M4/M5)；若失败尝试 M6/M7 格式 0x3a 0x02 0x00 <hex>
                 self.execute_ipmitool(["raw", "0x3a", "0x01", "0x00"], server_override=srv)
-                time.sleep(0.2)
-                return self.execute_ipmitool(["raw", "0x3a", "0x02", sp_hex], server_override=srv)
+                time.sleep(0.15)
+                succ, out, lat = self.execute_ipmitool(["raw", "0x3a", "0x02", sp_hex], server_override=srv)
+                if not succ:
+                    return self.execute_ipmitool(["raw", "0x3a", "0x02", "0x00", sp_hex], server_override=srv)
+                return succ, out, lat
             elif cmd_type == "set_single":
-                # 浪潮单扇区调速
                 fan_id = f"0x{(fan_index or 0):02x}"
                 self.execute_ipmitool(["raw", "0x3a", "0x01", "0x00"], server_override=srv)
-                time.sleep(0.2)
-                return self.execute_ipmitool(["raw", "0x3a", "0x02", sp_hex], server_override=srv)
+                time.sleep(0.15)
+                return self.execute_ipmitool(["raw", "0x3a", "0x02", fan_id, sp_hex], server_override=srv)
 
-        # 2. 华为 (Huawei) FusionServer / RH2288
-        elif brand == "huawei":
+        # 2. 华为 (Huawei) FusionServer / RH2288 / 1288H / TaiShan
+        elif brand in ("huawei", "zte"):
             if cmd_type == "auto":
                 return self.execute_ipmitool(["raw", "0x30", "0x90", "0x00"], server_override=srv)
             elif cmd_type in ("manual", "set_all"):
                 # 0x30 0x90 0x01 <hex> 切手动并设速
                 return self.execute_ipmitool(["raw", "0x30", "0x90", "0x01", sp_hex], server_override=srv)
             elif cmd_type == "set_single":
-                return self.execute_ipmitool(["raw", "0x30", "0x90", "0x01", sp_hex], server_override=srv)
+                fan_id = f"0x{(fan_index or 0):02x}"
+                return self.execute_ipmitool(["raw", "0x30", "0x90", "0x02", fan_id, sp_hex], server_override=srv)
 
-        # 3. 超微 (Supermicro)
+        # 3. 联想 (Lenovo) ThinkSystem XCC / IBM System x M5 (IMM2)
+        elif brand in ("lenovo", "ibm"):
+            if cmd_type == "auto":
+                # 优先 XCC，备选 IMM2
+                succ, out, lat = self.execute_ipmitool(["raw", "0x3a", "0x01", "0x01"], server_override=srv)
+                if not succ:
+                    return self.execute_ipmitool(["raw", "0x3a", "0x07", "0x00"], server_override=srv)
+                return succ, out, lat
+            elif cmd_type in ("manual", "set_all"):
+                # XCC 调速
+                self.execute_ipmitool(["raw", "0x3a", "0x01", "0x00"], server_override=srv)
+                time.sleep(0.15)
+                succ, out, lat = self.execute_ipmitool(["raw", "0x3a", "0x02", sp_hex], server_override=srv)
+                if not succ:
+                    # IMM2 调速
+                    self.execute_ipmitool(["raw", "0x3a", "0x07", "0x01"], server_override=srv)
+                    time.sleep(0.15)
+                    return self.execute_ipmitool(["raw", "0x3a", "0x07", "0x02", "0x00", sp_hex], server_override=srv)
+                return succ, out, lat
+            elif cmd_type == "set_single":
+                fan_id = f"0x{(fan_index or 0):02x}"
+                self.execute_ipmitool(["raw", "0x3a", "0x01", "0x00"], server_override=srv)
+                time.sleep(0.15)
+                return self.execute_ipmitool(["raw", "0x3a", "0x02", fan_id, sp_hex], server_override=srv)
+
+        # 4. 惠普 (HPE) ProLiant Gen8 / Gen9 / Gen10 (iLO4 / iLO5)
+        elif brand in ("hpe", "hp"):
+            if cmd_type == "auto":
+                succ, out, lat = self.execute_ipmitool(["raw", "0x30", "0x22", "0x00"], server_override=srv)
+                if not succ:
+                    return self.execute_ipmitool(["raw", "0x2e", "0x04", "0x00", "0x00"], server_override=srv)
+                return succ, out, lat
+            elif cmd_type in ("manual", "set_all"):
+                succ, out, lat = self.execute_ipmitool(["raw", "0x30", "0x22", "0x01", sp_hex], server_override=srv)
+                if not succ:
+                    return self.execute_ipmitool(["raw", "0x2e", "0x04", "0x01", sp_hex], server_override=srv)
+                return succ, out, lat
+            elif cmd_type == "set_single":
+                fan_id = f"0x{(fan_index or 0):02x}"
+                return self.execute_ipmitool(["raw", "0x30", "0x22", "0x02", fan_id, sp_hex], server_override=srv)
+
+        # 5. 华三 (H3C) UniServer R4900 / R4700 G3/G5 (HDM)
+        elif brand == "h3c":
+            if cmd_type == "auto":
+                succ, out, lat = self.execute_ipmitool(["raw", "0x30", "0x90", "0x00"], server_override=srv)
+                if not succ:
+                    return self.execute_ipmitool(["raw", "0x32", "0xbb", "0x00"], server_override=srv)
+                return succ, out, lat
+            elif cmd_type in ("manual", "set_all"):
+                succ, out, lat = self.execute_ipmitool(["raw", "0x30", "0x90", "0x01", sp_hex], server_override=srv)
+                if not succ:
+                    return self.execute_ipmitool(["raw", "0x32", "0xbb", "0x01", sp_hex], server_override=srv)
+                return succ, out, lat
+            elif cmd_type == "set_single":
+                fan_id = f"0x{(fan_index or 0):02x}"
+                return self.execute_ipmitool(["raw", "0x30", "0x90", "0x02", fan_id, sp_hex], server_override=srv)
+
+        # 6. 超微 (Supermicro) X9 / X10 / X11 / X12 / H11 / H12
         elif brand == "supermicro":
             if cmd_type == "auto":
-                # Optimal 最佳自动模式
+                # Optimal 最佳自动模式 (0x02)
                 return self.execute_ipmitool(["raw", "0x30", "0x45", "0x01", "0x02"], server_override=srv)
             elif cmd_type in ("manual", "set_all"):
-                # 设为 Full 全速或通过 0x70 设定扇区百分比
+                # 设为 Full 全速并在 Zone 0 与 Zone 1 同步施加细粒度 PWM
                 self.execute_ipmitool(["raw", "0x30", "0x45", "0x01", "0x01"], server_override=srv)
-                time.sleep(0.2)
-                return self.execute_ipmitool(["raw", "0x30", "0x70", "0x66", "0x01", "0x00", sp_hex], server_override=srv)
+                time.sleep(0.15)
+                self.execute_ipmitool(["raw", "0x30", "0x70", "0x66", "0x01", "0x00", sp_hex], server_override=srv)
+                return self.execute_ipmitool(["raw", "0x30", "0x70", "0x66", "0x01", "0x01", sp_hex], server_override=srv)
             elif cmd_type == "set_single":
                 fan_id = f"0x{(fan_index or 0):02x}"
                 return self.execute_ipmitool(["raw", "0x30", "0x70", "0x66", "0x01", fan_id, sp_hex], server_override=srv)
 
-        # 默认：戴尔 (Dell PowerEdge) 12G/13G/14G/15G
-        else:
+        # 7. 华擎 / 华硕 (ASRock Rack / ASUS)
+        elif brand in ("asrock", "asus"):
+            if cmd_type == "auto":
+                return self.execute_ipmitool(["raw", "0x3a", "0x01", "0x00", "0x00"], server_override=srv)
+            elif cmd_type in ("manual", "set_all"):
+                return self.execute_ipmitool(["raw", "0x3a", "0x01", "0x01", sp_hex], server_override=srv)
+            elif cmd_type == "set_single":
+                fan_id = f"0x{(fan_index or 0):02x}"
+                return self.execute_ipmitool(["raw", "0x3a", "0x01", "0x01", fan_id, sp_hex], server_override=srv)
+
+        # 8. 默认：戴尔 (Dell PowerEdge) 12G/13G/14G/15G/16G
+        elif brand == "dell":
             if cmd_type == "auto":
                 return self.execute_ipmitool(["raw", "0x30", "0x30", "0x01", "0x01"], server_override=srv)
             elif cmd_type in ("manual", "set_all"):
                 self.execute_ipmitool(["raw", "0x30", "0x30", "0x01", "0x00"], server_override=srv)
-                time.sleep(0.2)
+                time.sleep(0.15)
                 return self.execute_ipmitool(["raw", "0x30", "0x30", "0x02", "0xff", sp_hex], server_override=srv)
             elif cmd_type == "set_single":
                 fan_id = f"0x{(fan_index or 0):02x}"
                 self.execute_ipmitool(["raw", "0x30", "0x30", "0x01", "0x00"], server_override=srv)
-                time.sleep(0.2)
+                time.sleep(0.15)
+                return self.execute_ipmitool(["raw", "0x30", "0x30", "0x02", fan_id, sp_hex], server_override=srv)
+
+        # 9. 通用白牌机 (Generic IPMI 2.0 自动多协议探测兜底)
+        else:
+            if cmd_type == "auto":
+                for auto_cmd in (["raw", "0x30", "0x30", "0x01", "0x01"], ["raw", "0x3a", "0x01", "0x01"], ["raw", "0x30", "0x90", "0x00"], ["raw", "0x30", "0x45", "0x01", "0x02"]):
+                    succ, out, lat = self.execute_ipmitool(auto_cmd, server_override=srv)
+                    if succ: return succ, out, lat
+                return False, "通用自动模式下发未受支持", 0
+            elif cmd_type in ("manual", "set_all"):
+                # 尝试主流常见协议序列
+                for m_pair in [
+                    (["raw", "0x30", "0x30", "0x01", "0x00"], ["raw", "0x30", "0x30", "0x02", "0xff", sp_hex]),
+                    (["raw", "0x3a", "0x01", "0x00"], ["raw", "0x3a", "0x02", sp_hex]),
+                    ([], ["raw", "0x30", "0x90", "0x01", sp_hex]),
+                    (["raw", "0x30", "0x45", "0x01", "0x01"], ["raw", "0x30", "0x70", "0x66", "0x01", "0x00", sp_hex])
+                ]:
+                    if m_pair[0]: self.execute_ipmitool(m_pair[0], server_override=srv)
+                    succ, out, lat = self.execute_ipmitool(m_pair[1], server_override=srv)
+                    if succ: return succ, out, lat
+                return False, "通用手动模式下发未受支持", 0
+            elif cmd_type == "set_single":
+                fan_id = f"0x{(fan_index or 0):02x}"
+                self.execute_ipmitool(["raw", "0x30", "0x30", "0x01", "0x00"], server_override=srv)
                 return self.execute_ipmitool(["raw", "0x30", "0x30", "0x02", fan_id, sp_hex], server_override=srv)
 
     def set_fan_mode(self, mode, server_override=None):
@@ -950,20 +1082,29 @@ class IPMICore:
         inlet_temp = None
         fans = []
 
-        # 智能匹配风扇满载基准转速 (Max RPM Profile):
-        # 1. 1U 机型 (R640, R630, R620): 40mm 高压双对转风扇，满速通常为 24,000 ~ 28,000 RPM
-        # 2. 14G/15G 2U 机型 (R740, R740xd, R750 等): 标配风扇 ~15,000 RPM，带 GPU/NVMe 金标高风量风扇满速高达 19,000 ~ 21,600 RPM
-        # 3. 12G/13G 2U 机型 (R730, R730xd, R720 等): 标配风扇 11,500 ~ 12,500 RPM，银标高性能风扇约 15,500 RPM
+        # 智能匹配各品牌各形态风扇满载基准转速 (Max RPM Profile):
+        # 1. 1U 高密小尺寸风扇机型 (R640, R630, 华为 1288H, 浪潮 NF5180, 联想 SR630, 惠普 DL360 等): 40mm 高压双对转，满速通常为 22,000 ~ 28,000 RPM
+        # 2. 2U 现代机型 (R740, R750, 华为 2288H V5/V6, 浪潮 NF5280M5/M6, 联想 SR650, 惠普 DL380 Gen10 等):
+        #    标配风扇 ~15,000 RPM，带 GPU/高功耗 NVMe 的金标/高风量风扇极速高达 18,500 ~ 21,600 RPM
+        # 3. 经典旧代机型 (R730, R720, NF5280M4, 2288H V3, DL380p Gen8 等): 标配风扇约 11,500 ~ 12,500 RPM
+        # 4. 刀片 / 塔式 / 4U 存储机箱 (T430, T630, T640, NF5466 等): 大尺寸 92/120mm 风扇，满速 4,500 ~ 8,000 RPM
         model_str = (server_override.get("model", "") if server_override else "").upper()
         name_str = (server_override.get("name", "") if server_override else "").upper()
-        full_id_str = f"{model_str} {name_str}"
+        brand_str = (server_override.get("brand", "") if server_override else "").lower()
+        full_id_str = f"{brand_str} {model_str} {name_str}"
 
-        if any(m in full_id_str for m in ("R640", "R650", "R630", "R620", "R6515")):
+        if any(m in full_id_str for m in ("R640", "R650", "R630", "R620", "R6515", "1288H", "NF5180", "SR630", "DL360", "1U")):
             base_max_rpm = 24000.0
-        elif any(m in full_id_str for m in ("R740", "R740XD", "R750", "R7525", "R7425", "R840", "R940", "14G", "15G")):
+        elif any(m in full_id_str for m in ("T430", "T630", "T640", "T340", "T140", "T440", "T620", "ML350", "ML110", "塔式", "TOWER")):
+            base_max_rpm = 7500.0
+        elif any(m in full_id_str for m in ("R740", "R740XD", "R750", "R7525", "R7425", "R840", "R940", "14G", "15G", "16G", "2288H V5", "2288H V6", "NF5280M5", "NF5280M6", "SR650", "DL380 GEN10", "DL388 GEN10")):
             base_max_rpm = 19500.0
-        elif any(m in full_id_str for m in ("R730", "R720", "R710", "12G", "13G")):
+        elif any(m in full_id_str for m in ("R730", "R720", "R710", "12G", "13G", "2288H V3", "NF5280M4", "DL380 GEN9", "DL380P GEN8")):
             base_max_rpm = 12500.0
+        elif brand_str in ("inspur", "huawei", "lenovo", "h3c", "zte"):
+            base_max_rpm = 16000.0
+        elif brand_str == "supermicro":
+            base_max_rpm = 14000.0
         else:
             base_max_rpm = 15000.0
 
