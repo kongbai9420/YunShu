@@ -628,6 +628,8 @@ function triggerOpenAddHardwareNodeModal() {
   if (srvModel) srvModel.value = '';
   const serialEl = document.getElementById('srvFormSerial');
   if (serialEl) serialEl.value = '';
+  const maxFanRpmEl = document.getElementById('srvFormMaxFanRpm');
+  if (maxFanRpmEl) maxFanRpmEl.value = '';
   const srvIp = document.getElementById('srvFormIp');
   if (srvIp) srvIp.value = '';
   const srvUser = document.getElementById('srvFormUser');
@@ -3249,15 +3251,19 @@ function initFanMatrix() {
     });
   }
 
-  // 辅助函数: 依据当前激活服务器代际结构智能预估 RPM
+  // 辅助函数: 依据当前激活服务器代际结构及自定义 Max RPM 智能预估 RPM
   function getEstimatedFanRpm(pct) {
     const srv = state.servers.find(s => s.id === state.activeServer?.id) || state.servers[0] || {};
+    if (srv.max_fan_rpm && parseInt(srv.max_fan_rpm, 10) > 1000) {
+      const maxRpm = parseInt(srv.max_fan_rpm, 10);
+      return Math.round(1000 + (pct / 100) * (maxRpm - 1000));
+    }
     const model = ((srv.model || '') + ' ' + (srv.name || '')).toUpperCase();
     if (model.includes('R640') || model.includes('R650') || model.includes('R630') || model.includes('R620')) {
       return Math.round(2500 + (pct / 100) * 21500);
     }
-    if (model.includes('R740') || model.includes('R750') || model.includes('14G') || model.includes('15G')) {
-      return Math.round(2000 + (pct / 100) * 17500);
+    if (model.includes('R740') || model.includes('R750') || model.includes('R7515') || model.includes('14G') || model.includes('15G')) {
+      return Math.round(1800 + (pct / 100) * 13400);
     }
     return Math.round(1200 + (pct / 100) * 11300);
   }
@@ -3837,6 +3843,7 @@ function initServerClusterManagement() {
     const brand = document.getElementById('srvFormBrand')?.value || 'dell';
     const model = document.getElementById('srvFormModel').value;
     const serial = document.getElementById('srvFormSerial')?.value || '';
+    const maxFanRpmVal = parseInt(document.getElementById('srvFormMaxFanRpm')?.value || '0', 10) || 0;
     const ip = document.getElementById('srvFormIp').value;
     const user = document.getElementById('srvFormUser').value.trim();
     const password = document.getElementById('srvFormPassword').value;
@@ -3852,13 +3859,13 @@ function initServerClusterManagement() {
 
     if (editingServerId) {
       const res = await callApi('update_server', editingServerId, { 
-        name, brand, model, serial, ip, user, password
+        name, brand, model, serial, ip, user, password, max_fan_rpm: maxFanRpmVal
       });
       if (res && res.success) {
         showToast(res.message, 'success');
       }
     } else {
-      const res = await callApi('add_server', name, ip, user, password, model, brand, serial);
+      const res = await callApi('add_server', name, ip, user, password, model, brand, serial, 30, 2, maxFanRpmVal);
       if (res && res.success) {
         showToast(res.message, 'success');
       }
@@ -4289,6 +4296,8 @@ window.editServerModal = function(srvId) {
   document.getElementById('srvFormModel').value = srv.model || '';
   const serialEl = document.getElementById('srvFormSerial');
   if (serialEl) serialEl.value = srv.serial || '';
+  const maxFanRpmEl = document.getElementById('srvFormMaxFanRpm');
+  if (maxFanRpmEl) maxFanRpmEl.value = srv.max_fan_rpm || '';
   document.getElementById('srvFormIp').value = srv.ip;
   document.getElementById('srvFormUser').value = (srv.user !== undefined && srv.user !== null) ? srv.user : '';
   document.getElementById('srvFormPassword').value = srv.password;

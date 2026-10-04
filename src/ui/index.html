@@ -1741,6 +1741,24 @@
                 <label style="font-size:11.5px; color:var(--text-secondary); margin-bottom:4px; display:block;">出厂序列号 (SN / Tag)</label>
                 <input type="text" class="apple-input" id="srvFormSerial" placeholder="自动获取或手动填入" style="width:100%;">
               </div>
+              <div style="grid-column: 1 / -1; background:rgba(0,113,227,0.06); padding:10px 12px; border-radius:8px; border:1px solid rgba(0,113,227,0.15);">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                  <label style="font-size:11.5px; font-weight:600; color:var(--text-primary); margin:0;">🎯 风扇满载极速校准 (Max Fan RPM)</label>
+                  <span style="font-size:10px; color:var(--text-tertiary);">0 表示由代际模型自适应识别</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <input type="number" class="apple-input" id="srvFormMaxFanRpm" placeholder="自动推测 (如 15200 或 19500)" style="flex:1; font-size:12px;" min="0" max="35000" step="100">
+                  <div style="display:flex; gap:4px; flex-shrink:0;">
+                    <button type="button" class="secondary-btn" style="font-size:10.5px; padding:3px 8px; border-radius:6px;" onclick="document.getElementById('srvFormMaxFanRpm').value='12500'" title="适用于 R730, R720, M4 等经典服务器">12.5k (R730)</button>
+                    <button type="button" class="secondary-btn" style="font-size:10.5px; padding:3px 8px; border-radius:6px;" onclick="document.getElementById('srvFormMaxFanRpm').value='15200'" title="适用于 R740, R7515 等标准风扇机型">15.2k (标准扇)</button>
+                    <button type="button" class="secondary-btn" style="font-size:10.5px; padding:3px 8px; border-radius:6px;" onclick="document.getElementById('srvFormMaxFanRpm').value='19500'" title="适用于 R740/R7515/R750 金标/高风量风扇">19.5k (金标扇)</button>
+                    <button type="button" class="secondary-btn" style="font-size:10.5px; padding:3px 8px; border-radius:6px;" onclick="document.getElementById('srvFormMaxFanRpm').value='24000'" title="适用于 R640, R630, 1U 高密机型">24k (1U机型)</button>
+                  </div>
+                </div>
+                <div style="font-size:10px; color:var(--text-tertiary); margin-top:4px;">
+                  💡 <b>校准指南</b>：若您的 R740 / R7515 配备普通标准风扇，请点选 <b>15.2k</b>；若配备金标/高风量(含GPU/NVMe背板)风扇，请点选 <b>19.5k</b>。设定后当前百分比将与 iDRAC 网页端 100% 吻合！
+                </div>
+              </div>
             </div>
           </div>
         </div>

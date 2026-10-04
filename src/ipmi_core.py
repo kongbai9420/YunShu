@@ -1083,22 +1083,28 @@ class IPMICore:
         fans = []
 
         # 智能匹配各品牌各形态风扇满载基准转速 (Max RPM Profile):
-        # 1. 1U 高密小尺寸风扇机型 (R640, R630, 华为 1288H, 浪潮 NF5180, 联想 SR630, 惠普 DL360 等): 40mm 高压双对转，满速通常为 22,000 ~ 28,000 RPM
-        # 2. 2U 现代机型 (R740, R750, 华为 2288H V5/V6, 浪潮 NF5280M5/M6, 联想 SR650, 惠普 DL380 Gen10 等):
-        #    标配风扇 ~15,000 RPM，带 GPU/高功耗 NVMe 的金标/高风量风扇极速高达 18,500 ~ 21,600 RPM
-        # 3. 经典旧代机型 (R730, R720, NF5280M4, 2288H V3, DL380p Gen8 等): 标配风扇约 11,500 ~ 12,500 RPM
-        # 4. 刀片 / 塔式 / 4U 存储机箱 (T430, T630, T640, NF5466 等): 大尺寸 92/120mm 风扇，满速 4,500 ~ 8,000 RPM
+        # 0. 优先用户显式自定义满载转速 (Max Fan RPM Override)，彻底解决特定机型/特定风扇套件（如 R740/R7515 标准扇 vs 金标扇）校准问题
+        custom_max_rpm = 0
+        if server_override and server_override.get("max_fan_rpm"):
+            try:
+                custom_max_rpm = float(server_override.get("max_fan_rpm"))
+            except (ValueError, TypeError):
+                custom_max_rpm = 0
+
         model_str = (server_override.get("model", "") if server_override else "").upper()
         name_str = (server_override.get("name", "") if server_override else "").upper()
         brand_str = (server_override.get("brand", "") if server_override else "").lower()
         full_id_str = f"{brand_str} {model_str} {name_str}"
 
-        if any(m in full_id_str for m in ("R640", "R650", "R630", "R620", "R6515", "1288H", "NF5180", "SR630", "DL360", "1U")):
+        if custom_max_rpm > 1000:
+            base_max_rpm = custom_max_rpm
+        elif any(m in full_id_str for m in ("R640", "R650", "R630", "R620", "R6515", "1288H", "NF5180", "SR630", "DL360", "1U")):
             base_max_rpm = 24000.0
         elif any(m in full_id_str for m in ("T430", "T630", "T640", "T340", "T140", "T440", "T620", "ML350", "ML110", "塔式", "TOWER")):
             base_max_rpm = 7500.0
-        elif any(m in full_id_str for m in ("R740", "R740XD", "R750", "R7525", "R7425", "R840", "R940", "14G", "15G", "16G", "2288H V5", "2288H V6", "NF5280M5", "NF5280M6", "SR650", "DL380 GEN10", "DL388 GEN10")):
-            base_max_rpm = 19500.0
+        elif any(m in full_id_str for m in ("R740", "R740XD", "R750", "R7515", "R7525", "R7425", "R840", "R940", "14G", "15G", "16G", "2288H V5", "2288H V6", "NF5280M5", "NF5280M6", "SR650", "DL380 GEN10", "DL388 GEN10")):
+            # R740 / R7515 / 14G/15G 默认标准风扇基准设为 15,200 RPM；用户若是金标高风量扇可在界面设为 19,500 ~ 21,600 RPM
+            base_max_rpm = 15200.0
         elif any(m in full_id_str for m in ("R730", "R720", "R710", "12G", "13G", "2288H V3", "NF5280M4", "DL380 GEN9", "DL380P GEN8")):
             base_max_rpm = 12500.0
         elif brand_str in ("inspur", "huawei", "lenovo", "h3c", "zte"):
@@ -1206,8 +1212,12 @@ class IPMICore:
                 try:
                     rpm_val = int(float(val_str))
                     if rpm_val >= 0:
-                        # 动态自适应基准：若当前转速超过预设满速，平滑扩展上限（留 5% 裕量），避免百分比虚高爆表或卡死 100%
-                        fan_ceiling = max(base_max_rpm, float(rpm_val) * 1.05)
+                        # 若用户显式设定了满载转速，以用户配置为准；
+                        # 否则以代际基准 base_max_rpm 为准，仅当转速超过预设上限时动态扩展上限
+                        if custom_max_rpm > 1000:
+                            fan_ceiling = max(custom_max_rpm, float(rpm_val))
+                        else:
+                            fan_ceiling = max(base_max_rpm, float(rpm_val))
                         pct = min(100, max(0, int((rpm_val / fan_ceiling) * 100)))
                         fans.append({
                             "name": name,

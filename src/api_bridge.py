@@ -462,9 +462,9 @@ class APIBridge:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    def add_server(self, name, ip, user, password, model="Dell PowerEdge", brand="dell", serial="", timeout=30, retry=2):
+    def add_server(self, name, ip, user, password, model="Dell PowerEdge", brand="dell", serial="", timeout=30, retry=2, max_fan_rpm=0):
         try:
-            new_srv = self._config_mgr.add_server(name, ip, user, password, model, brand=brand, serial=serial, timeout=timeout, retry=retry)
+            new_srv = self._config_mgr.add_server(name, ip, user, password, model, brand=brand, serial=serial, timeout=timeout, retry=retry, max_fan_rpm=max_fan_rpm)
             # 自动设为当前激活受控节点，并立即异步拉取其实时遥测数据
             self._config_mgr.set_active_server_id(new_srv["id"])
             if self._ipmi_core.demo_mode:

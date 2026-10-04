@@ -296,7 +296,7 @@ class ConfigManager:
                 break
         self.save()
 
-    def add_server(self, name, ip, user, password, model="Dell PowerEdge", brand="dell", serial="", timeout=30, retry=2):
+    def add_server(self, name, ip, user, password, model="Dell PowerEdge", brand="dell", serial="", timeout=30, retry=2, max_fan_rpm=0):
         servers = self.get_servers()
         new_id = f"node_{uuid.uuid4().hex[:6]}"
         brand_val = (brand or "dell").strip().lower()
@@ -311,6 +311,7 @@ class ConfigManager:
             "model": model.strip() or ("Dell PowerEdge" if brand_val == "dell" else f"{brand_val.upper()} Server"),
             "brand": brand_val,
             "serial": serial.strip(),
+            "max_fan_rpm": int(max_fan_rpm) if max_fan_rpm else 0,
             "timeout": max(1, min(120, int(timeout))),
             "retry": max(0, min(10, int(retry))),
             "mode": "auto",
