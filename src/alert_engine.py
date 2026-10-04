@@ -408,12 +408,21 @@ class AlertEngine:
         safe_text = text.replace("'", " ").replace('"', " ").replace("\n", " ").strip()
         try:
             if sys.platform == "win32":
-                ps_script = f"Add-Type -AssemblyName System.Speech; (New-Object System.Speech.Synthesis.SpeechSynthesizer).Speak('{safe_text}')"
-                subprocess.run(
-                    ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", ps_script],
-                    capture_output=True,
-                    timeout=10
-                )
+                # 方案 1 (首选): 进程内原生调用，零外部进程，火绒等安全软件 0 拦截
+                # 利用 pythonnet / CLR 原生调用 Windows .NET System.Speech.Synthesis
+                try:
+                    import clr
+                    clr.AddReference('System.Speech, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35')
+                    from System.Speech.Synthesis import SpeechSynthesizer
+                    synth = SpeechSynthesizer()
+                    synth.SpeakAsync(safe_text)
+                    return
+                except Exception as clr_err:
+                    logger.debug(f"In-process .NET TTS not available: {clr_err}")
+
+                # 方案 2 (温和降级): 若无 TTS 引擎，使用 Windows 原生消息蜂鸣提示，绝不拉起隐藏 PowerShell 进程
+                import winsound
+                winsound.MessageBeep(winsound.MB_ICONASTERISK)
             elif sys.platform == "darwin":
                 subprocess.run(["say", safe_text], capture_output=True, timeout=10)
         except Exception as e:
