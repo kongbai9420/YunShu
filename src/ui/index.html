@@ -1748,6 +1748,7 @@
                 </div>
                 <div style="display:flex; align-items:center; gap:8px;">
                   <input type="number" class="apple-input" id="srvFormMaxFanRpm" placeholder="自动推测 (如 15200 或 19500)" style="flex:1; font-size:12px;" min="0" max="35000" step="100">
+                  <button type="button" class="primary-btn" id="btnAutoCalibrateForm" style="font-size:11px; padding:4px 10px; border-radius:6px; background:linear-gradient(135deg, #0071e3, #4facfe); border:none;" title="向风扇下发3秒满速测试信号并捕获峰值物理RPM">⚡ 3秒一键自测极速</button>
                   <div style="display:flex; gap:4px; flex-shrink:0;">
                     <button type="button" class="secondary-btn" style="font-size:10.5px; padding:3px 8px; border-radius:6px;" onclick="document.getElementById('srvFormMaxFanRpm').value='12500'" title="适用于 R730, R720, M4 等经典服务器">12.5k (R730)</button>
                     <button type="button" class="secondary-btn" style="font-size:10.5px; padding:3px 8px; border-radius:6px;" onclick="document.getElementById('srvFormMaxFanRpm').value='15200'" title="适用于 R740, R7515 等标准风扇机型">15.2k (标准扇)</button>
@@ -1756,7 +1757,9 @@
                   </div>
                 </div>
                 <div style="font-size:10px; color:var(--text-tertiary); margin-top:4px;">
-                  💡 <b>校准指南</b>：若您的 R740 / R7515 配备普通标准风扇，请点选 <b>15.2k</b>；若配备金标/高风量(含GPU/NVMe背板)风扇，请点选 <b>19.5k</b>。设定后当前百分比将与 iDRAC 网页端 100% 吻合！
+                  💡 <b>全自动校准</b>：
+                  1. 系统已默认开启 <b>SDR 硬件告警上限提取</b>，通常无需手动干预；
+                  2. 若需绝对精准，可点击 <b>⚡ 3秒一键自测极速</b>，系统将瞬间测定当前硬件的物理极限并自动回填！
                 </div>
               </div>
             </div>

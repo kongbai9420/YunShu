@@ -3877,6 +3877,39 @@ function initServerClusterManagement() {
     renderServerManagementList();
     renderProbeClusterMatrix();
   });
+
+  const btnCalibrateForm = document.getElementById('btnAutoCalibrateForm');
+  if (btnCalibrateForm) {
+    btnCalibrateForm.addEventListener('click', async () => {
+      const targetSrvId = editingServerId || state.activeServer?.id;
+      if (!targetSrvId) {
+        showToast('请先保存或选择一个有效的服务器节点', 'warning');
+        return;
+      }
+      btnCalibrateForm.disabled = true;
+      btnCalibrateForm.textContent = '⏳ 正在测定 (约3.5秒)...';
+      showToast('正在向风扇发送满速脉冲并捕获真实硬件响应，请稍候...', 'info');
+
+      try {
+        const res = await callApi('auto_calibrate_fan_max_rpm', targetSrvId);
+        if (res && res.success) {
+          const maxRpmInput = document.getElementById('srvFormMaxFanRpm');
+          if (maxRpmInput && res.max_fan_rpm) {
+            maxRpmInput.value = res.max_fan_rpm;
+          }
+          showToast(res.message || `已测得满载极速: ${res.max_fan_rpm} RPM 并自动回填`, 'success');
+          await refreshAllData();
+        } else {
+          showToast(res?.error || res?.message || '风扇自测未成功，请检查机器在线状态与IPMI调速权限', 'error');
+        }
+      } catch (e) {
+        showToast('测定通信异常: ' + e.message, 'error');
+      } finally {
+        btnCalibrateForm.disabled = false;
+        btnCalibrateForm.textContent = '⚡ 3秒一键自测极速';
+      }
+    });
+  }
 }
 
 // ==========================================
@@ -4095,6 +4128,7 @@ function renderServerManagementList() {
             </div>
 
             <div class="server-card-actions">
+              <button class="secondary-btn" onclick="quickCalibrateServerNode('${srv.id}')" title="⚡ 3秒自动测定并校准该机器真实物理最高转速 (自动复原原状态)">⚡ 校准</button>
               <button class="secondary-btn" onclick="testServerPing('${srv.id}')" title="断开该节点当前所有连接并重新尝试握手与采样">连接</button>
               <button class="secondary-btn" onclick="editServerModal('${srv.id}')">配置</button>
               <button class="primary-btn" onclick="openHardwareNodeDetailModal('${srv.id}')">详情</button>
@@ -4303,6 +4337,27 @@ window.editServerModal = function(srvId) {
   document.getElementById('srvFormPassword').value = srv.password;
 
   openHardwareNodeModal();
+};
+
+window.quickCalibrateServerNode = async function(srvId) {
+  const srv = state.servers.find(s => s.id === srvId);
+  const name = srv ? srv.name : '该服务器';
+  if (!confirm(`确定要对【${name}】进行 3 秒风扇满载物理极速自测吗？\n\n• 测试期间风扇会全速运转约 3.5 秒以抓取最高物理转速\n• 抓取后将自动恢复机器原本的温控状态，并保存校准数据`)) {
+    return;
+  }
+  showToast(`正在对【${name}】进行风扇物理极速测定，风扇将短暂提速...`, 'info');
+  try {
+    const res = await callApi('auto_calibrate_fan_max_rpm', srvId);
+    if (res && res.success) {
+      showToast(res.message || `校准成功！已测得物理满载: ${res.max_fan_rpm} RPM`, 'success');
+      await refreshAllData();
+      renderServerManagementList();
+    } else {
+      showToast(res?.error || res?.message || '风扇自测未成功，请检查节点连通性与权限', 'error');
+    }
+  } catch (e) {
+    showToast('校准执行异常: ' + e.message, 'error');
+  }
 };
 
 window.deleteServerItem = async function(srvId) {

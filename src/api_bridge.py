@@ -10,6 +10,7 @@ except ImportError:
 import webbrowser
 import threading
 import logging
+from log_manager import LogManager
 
 logger = logging.getLogger("APIBridge")
 
@@ -752,6 +753,16 @@ class APIBridge:
         except Exception as e:
             logger.error(f"control_pcie_fan_response error: {e}")
             return {"success": False, "error": f"PCIe 散热控制异常: {str(e)}"}
+
+    def auto_calibrate_fan_max_rpm(self, srv_id=None):
+        """一键安全测试并校准指定服务器的物理风扇最高转速"""
+        try:
+            srv = next((s for s in self._config_mgr.get_servers() if s.get("id") == srv_id), None) if srv_id else None
+            success, res = self._ipmi_core.auto_calibrate_fan_max_rpm(server_override=srv)
+            return {"success": success, **res}
+        except Exception as e:
+            logger.error(f"auto_calibrate_fan_max_rpm error: {e}")
+            return {"success": False, "error": f"校准接口异常: {str(e)}"}
 
     def minimize_window(self):
         if self._window:

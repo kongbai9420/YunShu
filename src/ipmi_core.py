@@ -901,6 +901,84 @@ class IPMICore:
             return True, f"[{srv.get('name')}] 所有风扇转速已设定为 {speed_percent}%"
         return False, f"[{srv.get('name')}] 风扇调速失败: {out.strip()}"
 
+    def auto_calibrate_fan_max_rpm(self, server_override=None):
+        """方案2：一键安全测定真实风扇满载 RPM (3秒全速峰值抓取并自动安全复原)"""
+        srv = server_override if server_override else self.config_mgr.get_active_server()
+        srv_id = srv.get("id")
+        srv_name = srv.get("name", "Server")
+
+        if self.demo_mode:
+            simulated_rpm = 15200 if "740" in srv_name or "7515" in srv_name else 12500
+            self.config_mgr.update_server(srv_id, {"max_fan_rpm": simulated_rpm})
+            return True, {
+                "max_fan_rpm": simulated_rpm,
+                "message": f"[{srv_name}] 自检校准成功！已测得物理满载极速: {simulated_rpm} RPM"
+            }
+
+        # 1. 记录当前温控模式与转速
+        orig_mode = "auto"
+        orig_speed = 25
+        with self.lock:
+            if srv_id in self.cluster_telemetry:
+                orig_mode = self.cluster_telemetry[srv_id].get("mode", "auto")
+                orig_speed = self.cluster_telemetry[srv_id].get("fan_target_pct", 25)
+            elif srv_id == self.config_mgr.get_active_server().get("id"):
+                orig_mode = self.last_sensor_data.get("mode", "auto")
+                orig_speed = self.last_sensor_data.get("current_target_speed", 25)
+
+        try:
+            logger.info(f"[{srv_name}] 开始执行一键风扇极速校准... 下发 100% 满速信号并采集物理响应")
+            # 2. 下发 100% 极速测试指令
+            self.set_all_fans_speed(100, server_override=srv, preserve_mode=True)
+            
+            # 等待风扇电机爬升至峰值转速 (3.5秒安全探测窗)
+            time.sleep(3.5)
+
+            # 3. 立即抓取此时所有风扇通道的实时最高转速
+            succ, out, _ = self.execute_ipmitool(["sensor"], timeout=8.0, server_override=srv)
+            if not succ or not out:
+                succ, out, _ = self.execute_ipmitool(["sdr", "type", "fan"], timeout=8.0, server_override=srv)
+
+            peak_rpm = 0
+            if succ and out:
+                parsed = self.parse_sensor_output(out, server_override=srv)
+                fan_rpms = [f.get("rpm", 0) for f in parsed.get("fans", []) if f.get("rpm", 0) > 1000]
+                if fan_rpms:
+                    peak_rpm = max(fan_rpms)
+
+            # 4. 无论成功与否，立即百分之百可靠地恢复原温控状态
+            if orig_mode == "auto":
+                self.set_fan_mode("auto", server_override=srv)
+            elif orig_mode == "dynamic":
+                self.set_fan_mode("dynamic", server_override=srv)
+            else:
+                self.set_all_fans_speed(orig_speed, server_override=srv)
+
+            # 5. 校验并持久化保存测得的极限转速
+            if peak_rpm >= 3500:
+                # 留少许转速裕量 (round 到整百)
+                calibrated_rpm = int(round(peak_rpm / 100.0) * 100)
+                self.config_mgr.update_server(srv_id, {"max_fan_rpm": calibrated_rpm})
+                logger.info(f"[{srv_name}] 风扇极速校准完成！实测满载: {calibrated_rpm} RPM (原模式已复原)")
+                return True, {
+                    "max_fan_rpm": calibrated_rpm,
+                    "peak_rpm": peak_rpm,
+                    "message": f"[{srv_name}] 极速校准成功！实测峰值: {peak_rpm} RPM，已为您自动设定标尺为: {calibrated_rpm} RPM！"
+                }
+            else:
+                return False, {
+                    "max_fan_rpm": 0,
+                    "error": f"未能捕获到有效的满载转速读数 (当前读数: {peak_rpm} RPM)，请确认 IPMI 调速权限是否开启"
+                }
+
+        except Exception as e:
+            # 异常兜底安全复原
+            try:
+                self.set_fan_mode("auto", server_override=srv)
+            except Exception:
+                pass
+            return False, {"error": f"校准过程异常: {str(e)}"}
+
     def set_single_fan_speed(self, fan_index, speed_percent, server_override=None):
         fan_index = max(0, min(7, int(fan_index)))
         speed_percent = max(0, min(100, int(speed_percent)))
@@ -1212,18 +1290,34 @@ class IPMICore:
                 try:
                     rpm_val = int(float(val_str))
                     if rpm_val >= 0:
-                        # 若用户显式设定了满载转速，以用户配置为准；
-                        # 否则以代际基准 base_max_rpm 为准，仅当转速超过预设上限时动态扩展上限
+                        # 方案1：自动从 SDR 提取 Upper Critical / Upper Non-Recoverable 作为满载硬件标尺
+                        sdr_threshold_max = 0.0
+                        for u_crit in (fault_max, warn_max):
+                            if u_crit and u_crit.lower() not in ("na", "none", "unknown", "0", "0.0", "0.000"):
+                                try:
+                                    crit_val = float(u_crit)
+                                    if 4000.0 <= crit_val <= 35000.0:
+                                        sdr_threshold_max = crit_val
+                                        break
+                                except (ValueError, TypeError):
+                                    pass
+
+                        # 优先级：用户指定 Max RPM > SDR 硬件告警上限 > 代际模型基准
                         if custom_max_rpm > 1000:
-                            fan_ceiling = max(custom_max_rpm, float(rpm_val))
+                            effective_benchmark = custom_max_rpm
+                        elif sdr_threshold_max > 1000:
+                            effective_benchmark = sdr_threshold_max
                         else:
-                            fan_ceiling = max(base_max_rpm, float(rpm_val))
+                            effective_benchmark = base_max_rpm
+
+                        fan_ceiling = max(effective_benchmark, float(rpm_val))
                         pct = min(100, max(0, int((rpm_val / fan_ceiling) * 100)))
                         fans.append({
                             "name": name,
                             "rpm": rpm_val,
                             "speed_pct": pct,
-                            "status": status
+                            "status": status,
+                            "max_rpm": int(fan_ceiling)
                         })
                 except (ValueError, TypeError):
                     pass
