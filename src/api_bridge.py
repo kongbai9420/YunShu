@@ -487,6 +487,13 @@ class APIBridge:
         try:
             success = self._config_mgr.update_server(srv_id, updates)
             if success:
+                # 若更新成功且更新了风扇上限或连接参数，立即异步刷新该服务器遥测
+                target_srv = next((s for s in self._config_mgr.get_servers() if s.get("id") == srv_id), None)
+                if target_srv:
+                    if self._ipmi_core.demo_mode:
+                        self._ipmi_core.fetch_sensors()
+                    else:
+                        threading.Thread(target=self._ipmi_core._poll_single_node, args=(target_srv, True), daemon=True).start()
                 return {"success": True, "message": "服务器参数更新成功"}
             return {"success": False, "message": "未找到对应服务器"}
         except Exception as e:

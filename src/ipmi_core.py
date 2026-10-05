@@ -1548,6 +1548,15 @@ class IPMICore:
                 merged_all_sensors = parsed["all_sensors"] if need_full_scan or not existing_tel.get("all_sensors") else existing_tel.get("all_sensors", [])
 
                 # 动态计算综合风扇目标百分比
+                # 自动计算当前节点适用的有效满载基准 RPM
+                node_bench_rpm = float(srv.get("max_fan_rpm") or 0)
+                if node_bench_rpm <= 1000 and parsed.get("fans"):
+                    first_fan_max = parsed["fans"][0].get("max_rpm")
+                    if first_fan_max and first_fan_max > 1000:
+                        node_bench_rpm = float(first_fan_max)
+                if node_bench_rpm <= 1000:
+                    node_bench_rpm = 15200.0 if any(m in f"{srv.get('model','')} {srv.get('name','')}".upper() for m in ("740", "750", "7515", "14G", "15G")) else 12500.0
+
                 srv_mode = srv.get("mode", "auto")
                 if srv_mode == "manual":
                     effective_pct = int(srv.get("manual_speed", 25))
@@ -1555,9 +1564,9 @@ class IPMICore:
                     pk = srv.get("preset_key", "silent")
                     effective_pct = PRESETS.get(pk, PRESETS["silent"])["speeds"][0]
                 elif srv_mode == "dynamic":
-                    effective_pct = self._last_applied_speeds.get(srv_id, int(round((avg_rpm / 12500.0) * 100)) if avg_rpm else 25)
-                else: # auto 原厂托管模式：由物理转速实时反推 Dell iDRAC 当前实际下发的风扇转速百分比
-                    effective_pct = int(round((avg_rpm / 12500.0) * 100)) if avg_rpm else 20
+                    effective_pct = self._last_applied_speeds.get(srv_id, int(round((avg_rpm / node_bench_rpm) * 100)) if avg_rpm else 25)
+                else: # auto 原厂托管模式：由物理转速实时反推当前实际下发的风扇转速百分比
+                    effective_pct = int(round((avg_rpm / node_bench_rpm) * 100)) if avg_rpm else 20
                 effective_pct = max(0, min(100, effective_pct))
 
                 # 若 DCMI 读取到了最新瞬时温度，优先融合更新 CPU 温度与进气温度

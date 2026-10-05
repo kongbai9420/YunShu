@@ -3577,6 +3577,16 @@ function renderSensorsTable() {
   tbody.innerHTML = formattedList.map(item => {
     const statusBadge = `<span class="badge ${item.isOk ? 'badge-normal' : 'badge-warning'}">${item.isOk ? '正常' : item.status}</span>`;
     const coreHighlight = item.isCore ? 'style="background:rgba(255,255,255,0.02);"' : '';
+
+    // 若为风扇转速，在传感器表格中直观附带显示当前计算出的转速百分比徽章
+    let valDisplay = item.value;
+    if (item.unit && item.unit.toUpperCase().includes('RPM')) {
+      const matchFan = state.fans.find(f => f.name.toLowerCase() === item.rawName.toLowerCase());
+      if (matchFan && matchFan.speed_pct !== undefined) {
+        valDisplay = `${item.value} <span class="micro-capsule capsule-blue" style="font-size:9.5px; padding:0 5px; margin-left:4px; font-weight:600;">${matchFan.speed_pct}%</span>`;
+      }
+    }
+
     return `
       <tr ${coreHighlight}>
         <td>
@@ -3587,7 +3597,7 @@ function renderSensorsTable() {
           <div style="font-size:11px; color:var(--text-tertiary); font-family:var(--font-mono); margin-top:2px;">${item.rawName}</div>
         </td>
         <td>
-          <span class="mono-cell" style="font-size:13.5px; font-weight:700; color:var(--text-primary);">${item.value}</span>
+          <span class="mono-cell" style="font-size:13.5px; font-weight:700; color:var(--text-primary);">${valDisplay}</span>
         </td>
         <td>
           <span style="font-size:12px; color:var(--text-secondary);">${item.unit}</span>
