@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>云枢运维平台 · 文档</title>
+  <meta name="description" content="云枢运维平台（YunShu Ops）4.4 使用文档：安装部署、配置项、设备接入、监控告警与巡检、运维操作、备份升级与常见问题">
+  <link rel="icon" href="assets/logo.png">
+  <!-- Docsify：浏览器里直接渲染 Markdown，无需构建；所有路径都是相对路径，可以放在任意子路径下（如 GitHub Pages 的 /YunShu/） -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/docsify@4.13.1/lib/themes/vue.css">
+  <link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+  <div id="app">正在加载文档…</div>
+  <script>
+    window.$docsify = {
+      name: '<img src="assets/logo.png" alt=""><span>云枢运维平台</span>',
+      nameLink: "#/wiki/README",
+      repo: "https://github.com/kongbai9420/YunShu",
+      coverpage: "_coverpage.md",
+      homepage: "wiki/README.md",
+      loadSidebar: "_sidebar.md",
+      alias: { "/.*/_sidebar.md": "/_sidebar.md" },
+      relativePath: true,
+      subMaxLevel: 2,
+      auto2top: true,
+      externalLinkTarget: "_blank",
+      search: { placeholder: "搜索文档", noData: "没有找到", depth: 3, paths: "auto" },
+      copyCode: { buttonText: "复制", successText: "已复制", errorText: "复制失败" },
+      pagination: { previousText: "上一页", nextText: "下一页", crossChapter: true, crossChapterText: true },
+    }
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/docsify@4.13.1/lib/docsify.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/docsify@4.13.1/lib/plugins/search.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/docsify-copy-code@3.0.0/dist/docsify-copy-code.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/docsify-pagination@2.10.1/dist/docsify-pagination.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-bash.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-yaml.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-nginx.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-powershell.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-ini.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-json.min.js"></script>
+</body>
+</html>

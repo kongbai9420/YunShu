@@ -1,0 +1,18 @@
+- 入门
+  - [首页](/wiki/README.md)
+  - [快速开始](/wiki/quick-start.md)
+  - [部署与运行](/wiki/deployment.md)
+  - [校验下载](/wiki/verify.md)
+- 日常使用
+  - [设备接入](/wiki/devices.md)
+  - [资产与回收站](/wiki/assets-recycle.md)
+  - [监控、告警与巡检](/wiki/monitoring-alerts.md)
+  - [运维操作](/wiki/operations.md)
+  - [总览、拓扑与机柜](/wiki/topology-racks.md)
+  - [用户、角色与资产范围](/wiki/users-scope.md)
+  - [外观与主题](/wiki/appearance.md)
+- 维护
+  - [配置项参考](/wiki/configuration.md)
+  - [备份、升级与迁移](/wiki/backup-upgrade.md)
+  - [常见问题](/wiki/troubleshooting.md)
+  - [开发说明](/wiki/development.md)
