@@ -1,0 +1,39 @@
+[project]
+name = "yunshu-ops-backend"
+version = "4.4.0-beta.1"
+description = "云枢运维平台 4.0 后端（FastAPI + SQLAlchemy + Alembic）"
+requires-python = ">=3.11,<3.12"
+license = { text = "MIT" }
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "sqlalchemy>=2,<3",
+    "alembic",
+    "cryptography",
+    "openpyxl",
+    "python-multipart",
+    "pysnmp",
+    "paramiko",
+    "pyghmi",
+    "httpx",
+    "pyvmomi",
+    # Windows 没有系统时区库：zoneinfo 要靠这个包才能按 Asia/Shanghai 等时区计算（每日报告、巡检计划、维护超期）
+    "tzdata",
+]
+
+[project.optional-dependencies]
+desktop = ["pywebview==6.2.1"]
+# 标准版（PostgreSQL，4.1 P8）：轻量版与桌面包不安装
+standard = ["psycopg[binary]==3.3.6"]
+dev = [
+    "pytest",
+    "httpx",
+    "snmpsim",
+    # snmpsim 运行时需要但没有声明
+    "pysmi",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra"

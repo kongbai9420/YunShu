@@ -1,0 +1,40 @@
+# 云枢运维平台：页面与接口（轻量版同时运行内嵌 Worker）
+# 由 install.sh 安装到 /etc/systemd/system/；要改设置请用 `systemctl edit yunshu-api`（升级会覆盖本文件，不会覆盖 drop-in）。
+[Unit]
+Description=Yunshu ops platform API and web UI
+Documentation=file:///opt/yunshu/current/README.txt
+Wants=network-online.target
+After=network-online.target yunshu-migrate.service
+
+[Service]
+Type=simple
+User=yunshu
+Group=yunshu
+EnvironmentFile=/etc/yunshu/yunshu.env
+WorkingDirectory=/var/lib/yunshu
+ExecStart=/opt/yunshu/current/yunshu/yunshu api
+# 可选：启动后等到就绪再算启动成功（需要 curl），用 `systemctl edit yunshu-api` 加：
+#   ExecStartPost=/bin/sh -c 'i=0; while [ $$i -lt 90 ]; do curl -fsS -o /dev/null http://127.0.0.1:8080/api/ready && exit 0; i=$$((i+1)); sleep 2; done; exit 1'
+# （单元文件里 $ 要写成 $$；端口按 yunshu.env 的 YUNSHU_PORT 改）
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=180
+TimeoutStopSec=60
+UMask=0027
+
+# 加固：只允许写数据、配置（主密钥）与日志目录；不需要任何特权端口能力（SNMP Trap 用 UDP 1162）
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/yunshu /etc/yunshu /var/log/yunshu
+PrivateTmp=yes
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,168 @@
+name: Windows package
+
+# Windows 服务版（MSI）与免安装 ZIP：构建、隔离自检，再在一次性运行器上真实安装 / 升级 / 卸载。
+# 发布工作流以 workflow_call 调用本文件，下载 windows-msi 与 windows-zip 两个 artifact（名字不要改）。
+
+on:
+  pull_request:
+    paths:
+      - backend/**
+      - frontend/**
+      - packaging/windows/**
+      - scripts/yunshu-windows.spec
+      - scripts/build-windows.ps1
+      - scripts/build-desktop.ps1
+      - scripts/desktop.spec
+      - scripts/desktop_entry.py
+      - scripts/desktop_notices.py
+      - scripts/desktop-guide.md
+      - .github/workflows/windows-package.yml
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build MSI and portable ZIP
+    runs-on: windows-2022
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Checkout Repository
+        # v4.4.0
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Set up Python
+        # v7.0.0
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements-standard.lock
+            backend/requirements-package.lock
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build yunshu.exe, smoke-test it, build the MSI and the portable ZIP
+        # 前端构建、哈希锁安装、PyInstaller、隔离自检（api / service --foreground / 维护命令）、WiX 5.0.2（固定 SHA-256）与 ICE 校验
+        run: ./scripts/build-windows.ps1 -Python python -Desktop
+
+      - name: Build the upgrade-test MSI (same program, higher version)
+        run: ./scripts/build-windows.ps1 -SkipApp -ProductVersion 4.4.99 -OutputName Yunshu-upgrade-test.msi
+
+      - name: Show checksums
+        run: Get-Content artifacts/windows/*.sha256, artifacts/desktop/*.sha256
+
+      - name: Upload MSI
+        # v7.0.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: windows-msi
+          path: |
+            artifacts/windows/Yunshu-*-windows-amd64.msi
+            artifacts/windows/Yunshu-*-windows-amd64.msi.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload portable ZIP
+        # v7.0.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: windows-zip
+          path: |
+            artifacts/desktop/Yunshu-windows-amd64.zip
+            artifacts/desktop/Yunshu-windows-amd64.zip.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload upgrade-test MSI
+        # v7.0.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: windows-msi-upgrade-test
+          path: artifacts/windows/Yunshu-upgrade-test.msi
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Upload smoke-test reports
+        if: always()
+        # v7.0.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: windows-package-smoke
+          path: |
+            artifacts/windows/smoke.json
+            artifacts/desktop/smoke.json
+          if-no-files-found: ignore
+          retention-days: 7
+
+  install-test:
+    name: Install test (${{ matrix.os }}, ${{ matrix.db }})
+    needs: build
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+            db: sqlite
+          - os: windows-2025
+            db: sqlite
+          # windows-2022 镜像预装 PostgreSQL（服务默认停用，PGBIN 指向 bin）；Windows 运行器不能跑 Linux 服务容器
+          - os: windows-2022
+            db: postgres
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Checkout Repository
+        # v4.4.0
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Download MSI
+        # v8.0.1
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: windows-msi
+          path: msi
+
+      - name: Download upgrade-test MSI
+        # v8.0.1
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: windows-msi-upgrade-test
+          path: msi-upgrade
+
+      - name: Verify checksum
+        run: |
+          $msi = Get-ChildItem msi/Yunshu-*-windows-amd64.msi
+          if (@($msi).Count -ne 1) { throw "windows-msi 应只有一个 MSI" }
+          $expected = (Get-Content "$($msi.FullName).sha256").Split(" ")[0]
+          $actual = (Get-FileHash -Algorithm SHA256 $msi.FullName).Hash.ToLowerInvariant()
+          if ($expected -ne $actual) { throw "SHA-256 不符：$actual" }
+
+      - name: Install, check service, permissions and tools, upgrade, uninstall
+        run: |
+          $msi = (Get-ChildItem msi/Yunshu-*-windows-amd64.msi).FullName
+          ./packaging/windows/ci-install-test.ps1 -Msi $msi -UpgradeMsi (Resolve-Path msi-upgrade/Yunshu-upgrade-test.msi) -Database ${{ matrix.db }}
+
+      - name: Upload installer and service logs
+        if: always()
+        # v7.0.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: windows-install-logs-${{ matrix.os }}-${{ matrix.db }}
+          path: ${{ runner.temp }}/yunshu-install-logs
+          if-no-files-found: ignore
+          retention-days: 7

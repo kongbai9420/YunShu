@@ -1,0 +1,24 @@
+{
+  "format": "yunshu-theme",
+  "version": 1,
+  "id": "ocean",
+  "name": "海洋",
+  "base": "glass",
+  "author": "example.invalid",
+  "description": "蓝绿色玻璃主题（示例）",
+  "theme_version": "1.0.0",
+  "light": {
+    "primary": "#00668a",
+    "primary-hover": "#005a7a",
+    "primary-active": "#004d69",
+    "ring": "#0091c2",
+    "link": "#00668a",
+    "app-backdrop": "radial-gradient(at 15% 10%, rgba(64, 200, 224, 0.5) 0, transparent 50%), radial-gradient(at 85% 85%, rgba(90, 140, 255, 0.45) 0, transparent 50%), linear-gradient(135deg, #e8f6fa 0%, #eef2fb 100%)"
+  },
+  "dark": {
+    "primary": "#00668a",
+    "ring": "#38bdf8",
+    "link": "#5cc8f0",
+    "app-backdrop": "radial-gradient(at 15% 10%, rgba(0, 150, 180, 0.4) 0, transparent 50%), radial-gradient(at 85% 85%, rgba(60, 90, 220, 0.35) 0, transparent 50%), linear-gradient(160deg, #071318 0%, #0c1224 100%)"
+  }
+}

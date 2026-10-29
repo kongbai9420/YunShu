@@ -1,0 +1,72 @@
+# syntax=docker/dockerfile:1
+# 云枢运维平台 4.x 镜像（backend/ + frontend/）。3.x 旧版不在本仓库，也不由本文件构建。
+# 支持 linux/amd64、linux/arm64；基础镜像按多架构索引摘要固定，apt 走 Debian 快照，依赖按哈希安装。
+#
+#   docker build -f docker/Dockerfile.ops -t yunshu .
+#   docker run ... yunshu            # 默认运行 API（含页面），端口 8080
+#   docker run ... yunshu worker     # 同一镜像运行 Worker
+
+# ---- 前端构建：在构建主机上生成静态文件，不需要模拟目标架构 ----
+FROM --platform=$BUILDPLATFORM node:20-bookworm-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0 AS frontend
+WORKDIR /src/frontend
+COPY frontend/package.json frontend/package-lock.json frontend/.npmrc ./
+RUN npm ci --no-audit --no-fund --loglevel=error
+COPY frontend/ ./
+RUN npm run build
+
+# ---- 运行：由 Buildx 按目标架构选择 Python 3.11 trixie（Debian 13）镜像 ----
+# Debian 12 的系统包有大量标为“不修 / 暂无修复”的 High / Critical，标签发布的漏洞门禁无法通过
+FROM python:3.11-slim-trixie@sha256:e88e9763f943ec1834f992a4b51e0f24500486803e8bc534e5767af9ea65f6ce
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_CONFIG_FILE=/dev/null \
+    PIP_NO_CACHE_DIR=1 \
+    TZ=Asia/Shanghai \
+    DEBIAN_FRONTEND=noninteractive \
+    YUNSHU_DATA_DIR=/data \
+    YUNSHU_MASTER_KEY_FILE=/etc/yunshu/master.key \
+    YUNSHU_FRONTEND_DIR=/app/frontend
+
+ARG DEBIAN_SNAPSHOT=20261017T000000Z
+# 不安装 ipmitool：它依赖的 freeipmi 有多项 Debian 标为不修的 Critical；
+# IPMI 采集只用 pyghmi，失败时如实显示原因；电源 / 风扇控制本来就只用 pyghmi。
+# 健康检查用镜像自带的 Python，不再安装 curl 及其依赖
+# postgresql-client-17：标准版用 pg_dump / pg_restore 备份恢复外部 PostgreSQL（17 版客户端也能备份 16 版服务器）
+RUN set -eux; \
+    echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid-until; \
+    printf "Types: deb\nURIs: http://snapshot.debian.org/archive/debian/%s\nSuites: trixie trixie-updates\nComponents: main\nSigned-By: /usr/share/keyrings/debian-archive-keyring.gpg\n\nTypes: deb\nURIs: http://snapshot.debian.org/archive/debian-security/%s\nSuites: trixie-security\nComponents: main\nSigned-By: /usr/share/keyrings/debian-archive-keyring.gpg\n" \
+        "$DEBIAN_SNAPSHOT" "$DEBIAN_SNAPSHOT" > /etc/apt/sources.list.d/debian.sources; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        tzdata=2026c-0+deb13u1 \
+        ca-certificates=20250419 \
+        postgresql-client-17=17.11-0+deb13u1; \
+    ln -snf "/usr/share/zoneinfo/$TZ" /etc/localtime && echo "$TZ" > /etc/timezone; \
+    apt-get clean; rm -rf /var/lib/apt/lists/*; \
+    groupadd --system --gid 10001 yunshu; \
+    useradd --system --uid 10001 --gid yunshu --home-dir /app --shell /usr/sbin/nologin yunshu
+
+WORKDIR /app/backend
+# 标准版锁 = 轻量版锁 + psycopg（4.1 P8）：同一镜像既可用 SQLite，也可连接外部 PostgreSQL
+COPY backend/requirements-standard.lock ./
+# 运行时不需要安装工具：pip / setuptools / wheel 自带的 Windows 启动器和旧版依赖会被扫描成未知许可证与漏洞
+RUN python -m pip install --require-hashes --no-deps -r requirements-standard.lock; \
+    python -m pip uninstall -y setuptools wheel pip
+COPY backend/ ./
+COPY --from=frontend /src/frontend/dist /app/frontend
+COPY docker/entrypoint-ops.sh /usr/local/bin/yunshu-entrypoint
+RUN chmod 0755 /usr/local/bin/yunshu-entrypoint; \
+    rm -rf tests .venv; \
+    mkdir -p /data /etc/yunshu; chown yunshu:yunshu /data /etc/yunshu; chmod 0700 /etc/yunshu
+
+# 数据库与备份在 /data；主密钥在 /etc/yunshu，必须是另一个卷（主密钥不与数据库同存）
+VOLUME ["/data", "/etc/yunshu"]
+USER yunshu
+EXPOSE 8080
+# 入口把角色写进 /tmp/yunshu-role，健康检查按角色区分：api 看 /api/ready（数据库可用、结构版本一致、
+# 内嵌 Worker 在运行），worker 看本容器的 Worker 心跳（python -m app.worker --check），migrate / backup 等一次性入口不检查
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD ["sh", "-c", "case \"$(cat /tmp/yunshu-role 2>/dev/null || echo api)\" in api) python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/api/ready', timeout=8)\" ;; worker) python -m app.worker --check >/dev/null ;; *) true ;; esac"]
+ENTRYPOINT ["/usr/local/bin/yunshu-entrypoint"]
+CMD ["api"]

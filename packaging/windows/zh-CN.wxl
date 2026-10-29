@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- WiX 5 的防火墙扩展只带英文提示；安装包是简体中文（zh-CN），这里补上它要用的字符串 -->
+<WixLocalization Culture="zh-CN" Codepage="936" xmlns="http://wixtoolset.org/schemas/v4/wxl">
+  <String Id="WixSchedFirewallExceptionsInstall" Value="正在配置 Windows 防火墙" />
+  <String Id="WixSchedFirewallExceptionsUninstall" Value="正在配置 Windows 防火墙" />
+  <String Id="WixRollbackFirewallExceptionsInstall" Value="正在回滚 Windows 防火墙配置" />
+  <String Id="WixExecFirewallExceptionsInstall" Value="正在添加 Windows 防火墙规则" />
+  <String Id="WixRollbackFirewallExceptionsUninstall" Value="正在回滚 Windows 防火墙配置" />
+  <String Id="WixExecFirewallExceptionsUninstall" Value="正在删除 Windows 防火墙规则" />
+  <String Id="msierrFirewallCannotConnect" Value="无法连接 Windows 防火墙。([2]   [3]   [4]   [5])" />
+</WixLocalization>

@@ -1,0 +1,233 @@
+name: Linux Package
+
+# 云枢 Linux 压缩包（自带 Python 运行时 + systemd 单元 + install.sh / uninstall.sh）。
+# - build：amd64 / arm64 各在原生 runner 上、固定摘要的 AlmaLinux 8（glibc 2.28）+ Python 3.11 容器里构建并冒烟
+#   （scripts/build-linux.sh），上传 workflow artifact `linux-amd64` / `linux-arm64`（tar.gz + .sha256），发布工作流按这两个名字下载；
+#   SBOM / Grype 结果按 linux-package 范围汇总，v* 标签时执行门槛。
+# - install-test：每个支持的发行版 × 架构，用官方镜像（按摘要固定）做两轮：
+#   direct  —— 普通容器（没有 systemd）：install.sh --no-systemd，以 yunshu 用户直接运行；
+#   systemd —— 加装 systemd 并作为 1 号进程的特权容器：install.sh / --start、单元、升级、回滚、卸载、--purge。
+#   麒麟（Kylin）没有可信的公开镜像，本身未测试；麒麟 V10 由与它 glibc 2.28 基线相同的 openEuler 20.03 LTS SP4、
+#   AlmaLinux 8 / Rocky Linux 8 覆盖，另测 openEuler 22.03 LTS SP4（见 deploy/linux/README.md）。
+# 只用伪造数据与应用自带的初始账号，不连接任何设备，不发布任何东西。
+
+on:
+  pull_request:
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'scripts/*linux*'
+      - 'deploy/linux/**'
+      - '.github/workflows/linux-package.yml'
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - name: Checkout Repository
+        # v4.4.0
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Set up Node.js
+        # v7.1.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+
+      - name: Build and smoke-test the package on the glibc 2.28 baseline (pinned almalinux:8)
+        run: |
+          set -eu
+          export SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
+          bash scripts/build-linux.sh --docker --frontend-dist frontend/dist --output artifacts/linux
+          sudo chown -R "$(id -u):$(id -g)" artifacts
+          ls -l artifacts/linux
+
+      - name: Check produced files
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          set -eu
+          cd artifacts/linux
+          ls yunshu-*-linux-"$ARCH".tar.gz yunshu-*-linux-"$ARCH".tar.gz.sha256
+          sha256sum -c yunshu-*-linux-"$ARCH".tar.gz.sha256
+          # 顶层目录必须是 yunshu-<版本>/
+          version="$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' ../../backend/app/__init__.py)"
+          test "$(tar tzf yunshu-*-linux-"$ARCH".tar.gz | cut -d/ -f1 | sort -u)" = "yunshu-$version"
+
+      - name: Upload package
+        # v7.0.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: linux-${{ matrix.arch }}
+          path: |
+            artifacts/linux/yunshu-*-linux-${{ matrix.arch }}.tar.gz
+            artifacts/linux/yunshu-*-linux-${{ matrix.arch }}.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+      # 供应链证据：对解压后的实际程序目录生成 SBOM 并扫描，按 linux-package 范围汇总（scripts/supply_chain_evidence.py）。
+      # 与镜像工作流一致：PR 只生成报告；v* 标签（发布工作流经 workflow_call 调用时）执行门槛，不通过则构建失败。
+      - name: Download pinned Syft
+        id: syft
+        # sbom-action v0.24.3；只下载工具
+        uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c
+        with:
+          syft-version: v1.54.1
+
+      - name: Download pinned Grype
+        id: grype
+        # scan-action v7.4.2
+        uses: anchore/scan-action/download-grype@27805bf3b4e84b4a5c980df22ed233c00390a439
+        with:
+          grype-version: v0.120.1
+          cache-db: 'true'
+
+      - name: SBOM, vulnerability scan and evidence summary of the extracted package
+        env:
+          ARCH: ${{ matrix.arch }}
+          SYFT: ${{ steps.syft.outputs.cmd }}
+          GRYPE: ${{ steps.grype.outputs.cmd }}
+          SYFT_CHECK_FOR_APP_UPDATE: 'false'
+          GRYPE_CHECK_FOR_APP_UPDATE: 'false'
+        run: |
+          set -eu
+          out="artifacts/supply-chain/linux-package-$ARCH"
+          mkdir -p "$out" /tmp/yunshu-sbom
+          tarball="$(ls artifacts/linux/yunshu-*-linux-"$ARCH".tar.gz)"
+          tar xzf "$tarball" -C /tmp/yunshu-sbom
+          "$SYFT" dir:/tmp/yunshu-sbom -o "syft-json=$out/sbom.syft.json" -o "spdx-json=$out/sbom.spdx.json"
+          "$GRYPE" "sbom:$out/sbom.syft.json" -o json --file "$out/scan.grype.json"
+          "$GRYPE" "sbom:$out/sbom.syft.json" -o table | tail -n 40 || true
+          "$SYFT" version > "$out/tools.txt"
+          "$GRYPE" version >> "$out/tools.txt"
+          enforce=()
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then enforce=(--enforce); fi
+          python3 scripts/supply_chain_evidence.py --sbom "$out/sbom.spdx.json" --scan-input "$out/sbom.syft.json" \
+            --scan "$out/scan.grype.json" --output "$out" --scope linux-package --subject-file "$tarball" "${enforce[@]}"
+
+      - name: Archive supply chain evidence
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: supply-chain-linux-package-${{ matrix.arch }}
+          path: artifacts/supply-chain/linux-package-${{ matrix.arch }}/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  install-test:
+    name: Install (${{ matrix.distro }}, ${{ matrix.arch }})
+    needs: build
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+        distro: [debian-12, debian-13, ubuntu-22.04, ubuntu-24.04, rocky-9, alma-9, alma-8, rocky-8,
+                 openeuler-24.03, openeuler-22.03, openeuler-20.03-kylin-v10-proxy]
+        include:
+          # 官方镜像，标签 + 多架构索引摘要固定（2026-10-28 取得）
+          - distro: debian-12
+            image: debian:12@sha256:d74df7598108a173a621eda4d58a2adbf850b2d9a9d81bc2cca1a6c21174a880
+          - distro: debian-13
+            image: debian:13@sha256:8c4733a92aacd0bcff3779eadc35a4a5147f36cb20a5fcb56504cbc740212259
+          - distro: ubuntu-22.04
+            image: ubuntu:22.04@sha256:e0f80c829509ef4df9e76bd8944eb7b8ec25cbb379b112a7f9448b2c77a77c9b
+          - distro: ubuntu-24.04
+            image: ubuntu:24.04@sha256:24737cef17f4e22b1977df7d9a05e77c4e28b7da5b8911f8d8ccda136bf3573c
+          - distro: rocky-9
+            image: rockylinux/rockylinux:9@sha256:8101994123cf3d0a8fee517bee7f39e555c7d92bd2d9eb3303cc988a0eeed00f
+          - distro: alma-9
+            image: almalinux:9@sha256:245f8aab832fe800aa42bdab5fad75ebbd8e0b4c9f24820a83c638b177857ae2
+          - distro: openeuler-24.03
+            image: openeuler/openeuler:24.03-lts@sha256:ace677f48c79ae6bc17046cb8c2940b38f7050afc752c8463e1553b9e7b60974
+          # EL8：glibc 2.28、systemd 239，与构建基线相同
+          - distro: alma-8
+            image: almalinux:8@sha256:2d0f2eb2a83cc09dbc2eb92fade4dbe8f709628149e81aa00aec70630406603b
+          - distro: rocky-8
+            image: rockylinux/rockylinux:8@sha256:e8a49c5403b687db05d4d67333fa45808fbe74f36e683cec7abb1f7d0f2338c6
+          - distro: openeuler-22.03
+            image: openeuler/openeuler:22.03-lts-sp4@sha256:f4f7b49430a7eec2f8dfd9d25d6d677cb81aa7ccbf2cd4cac70c4f9acc39f7ee
+          # 麒麟没有可信的公开容器镜像：麒麟 V10 由 glibc 2.28 的 openEuler 20.03 LTS SP4（以及上面的 EL8）覆盖，
+          # 但这不是在麒麟本身上的测试
+          - distro: openeuler-20.03-kylin-v10-proxy
+            image: openeuler/openeuler:20.03-lts-sp4@sha256:4ddffd12e6506927f1bfd17d7ef587c5f89f16e47421edd169d18a66e2cc7053
+    steps:
+      - name: Checkout Repository
+        # v4.4.0
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Download package
+        # v7.0.0
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          name: linux-${{ matrix.arch }}
+          path: dist
+
+      - name: Pull image
+        env:
+          IMAGE: ${{ matrix.image }}
+        run: docker pull "$IMAGE"
+
+      - name: Install test without systemd (install.sh --no-systemd, run as the yunshu user)
+        env:
+          IMAGE: ${{ matrix.image }}
+        run: |
+          set -eu
+          tarball="$(cd dist && ls yunshu-*-linux-*.tar.gz)"
+          docker run --rm -v "$PWD/dist:/pkg:ro" -v "$PWD/deploy/linux/ci:/ci:ro" "$IMAGE" \
+            bash /ci/install-test.sh direct "/pkg/$tarball"
+
+      - name: Build systemd test image
+        env:
+          IMAGE: ${{ matrix.image }}
+        run: docker build -q --build-arg "BASE=$IMAGE" -f deploy/linux/ci/Dockerfile.systemd -t yunshu-ci-systemd deploy/linux/ci
+
+      - name: Install test with systemd as PID 1 (units, upgrade, rollback, uninstall, purge)
+        run: |
+          set -eu
+          tarball="$(cd dist && ls yunshu-*-linux-*.tar.gz)"
+          docker run -d --name yunshu-systemd --privileged --cgroupns=private \
+            --tmpfs /run --tmpfs /run/lock \
+            -v "$PWD/dist:/pkg:ro" -v "$PWD/deploy/linux/ci:/ci:ro" yunshu-ci-systemd
+          for i in $(seq 1 60); do
+            state="$(docker exec yunshu-systemd systemctl is-system-running 2>/dev/null || true)"
+            case "$state" in running|degraded) break ;; esac
+            sleep 2
+          done
+          echo "systemd: $state"
+          docker exec yunshu-systemd bash /ci/install-test.sh systemd "/pkg/$tarball"
+
+      - name: Show systemd container logs on failure
+        if: failure()
+        run: |
+          docker exec yunshu-systemd systemctl --no-pager --failed || true
+          docker exec yunshu-systemd journalctl --no-pager -n 200 || true
+          docker logs yunshu-systemd 2>&1 | tail -n 100 || true
+
+      - name: Remove systemd container
+        if: always()
+        run: docker rm -f yunshu-systemd || true

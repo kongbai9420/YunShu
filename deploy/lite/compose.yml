@@ -1,0 +1,43 @@
+# 云枢 4.1 轻量档（个人 / 小机房）：单容器，SQLite 存在数据卷里，Worker 在 API 进程内运行。
+# 启动：docker compose up -d；打开 http://<主机>:8080，首次登录 admin / admin123，按提示修改密码。
+# 资产或使用人数变多后，用 SQLite → PostgreSQL 升级工具迁到标准档。
+services:
+  yunshu:
+    image: ${YUNSHU_IMAGE:-ghcr.io/kongbai9420/yunshu:4.4.0-beta.1}
+    command: ["api"]
+    ports:
+      - "8080:8080"
+      # 接收 SNMP Trap 时取消注释：BMC 只发往 UDP 162，映射到平台的 1162
+      # - "162:1162/udp"
+    volumes:
+      - yunshu-data:/data
+      - yunshu-keys:/etc/yunshu
+    environment:
+      YUNSHU_EMBEDDED_WORKER: "1"
+      # 本模板已选定轻量档，不显示首次启动向导
+      YUNSHU_SETUP_WIZARD: "0"
+      # 经 HTTPS 反向代理访问时改为 1
+      YUNSHU_SECURE_COOKIES: "0"
+      # 接收服务器告警推送（可选，默认关闭，见 deploy/README.md“接收服务器告警推送”）
+      # YUNSHU_SNMP_TRAP: "1"
+      # YUNSHU_SNMP_TRAP_TARGET: "BMC 能访问到的本机 IP"
+      # YUNSHU_BMC_EVENTS_URL: "https://BMC 能访问到的平台 HTTPS 地址"
+      # 平台时区，影响每日报告、巡检计划的时间（镜像默认北京时间）
+      # TZ: Asia/Shanghai
+      # 反向代理不在本机 / 本容器时填代理地址（多个用逗号分隔），平台才采信转发的真实客户端地址；不要设成 *
+      # FORWARDED_ALLOW_IPS: "代理的 IP"
+    # 标准输出日志按大小轮转，避免长期运行把磁盘写满
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    restart: unless-stopped
+
+# 卷名固定（不随所在目录变化），与 docker run 示例、标准版模板同名：换模板或换目录后仍是同一份数据
+volumes:
+  yunshu-data:
+    name: yunshu-data
+  # 主密钥卷：请单独备份（步骤见 deploy/README.md“备份主密钥”），丢失后已保存的设备密码无法解密
+  yunshu-keys:
+    name: yunshu-keys

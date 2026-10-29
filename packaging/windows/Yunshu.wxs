@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  云枢运维平台 Windows 服务版安装包（WiX Toolset 5.0.2，MS-RL；只作为构建工具使用，不随安装包分发）。
+  由 scripts/build-windows.ps1 构建，传入：
+    ProductVersion  纯数字版本（如 4.4.0；beta 标记只出现在文件名里）
+    AppDir          PyInstaller 输出的 yunshu 目录（其余文件由 harvest.py 生成的 AppFiles.wxs 列出）
+    LicenseRtf      由 LICENSE 生成的 RTF（安装界面的许可协议页）
+    ServiceSid      虚拟账号 NT SERVICE\Yunshu 的 SID（由服务名确定，`sc showsid Yunshu` 可核对）
+  目录约定：程序在 Program Files\Yunshu；配置、数据、主密钥、日志在 ProgramData\Yunshu，卸载时保留。
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util"
+     xmlns:fire="http://wixtoolset.org/schemas/v4/wxs/firewall"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+  <Package Name="云枢运维平台" Manufacturer="云枢运维平台" Version="$(var.ProductVersion)"
+           UpgradeCode="8A7F0875-5D62-42CD-A9AA-B854746D4428" Scope="perMachine" Language="2052" Codepage="936"
+           InstallerVersion="500" Compressed="yes">
+    <SummaryInformation Description="云枢运维平台 Windows 服务版" Manufacturer="云枢运维平台" Codepage="936" />
+
+    <!-- 升级：先完整卸载旧版本再安装（ProgramData 里的配置、数据、密钥是永久组件，不受影响） -->
+    <MajorUpgrade Schedule="afterInstallValidate" AllowSameVersionUpgrades="yes"
+                  DowngradeErrorMessage="已安装更新版本的云枢运维平台。如需降级，请先卸载新版本（数据会保留）。" />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <!-- Python 3.11 需要 Windows 8.1 / Server 2012 R2 以上（VersionNT 603）；只支持 64 位 -->
+    <Launch Condition="Installed OR (VersionNT64 &gt;= 603)" Message="云枢运维平台需要 64 位的 Windows 10 / 11 或 Windows Server 2019 及以上版本。" />
+
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/kongbai9420/YunShu" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/kongbai9420/YunShu/blob/main/deploy/windows/README.md" />
+    <Property Id="ARPCOMMENTS" Value="服务名 Yunshu；配置与数据在 ProgramData\Yunshu，卸载时保留。" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="Yunshu" />
+    </StandardDirectory>
+    <StandardDirectory Id="CommonAppDataFolder">
+      <Directory Id="YUNSHU_ROOT" Name="Yunshu">
+        <Directory Id="YUNSHU_DATA" Name="data" />
+        <Directory Id="YUNSHU_KEYS" Name="keys" />
+        <Directory Id="YUNSHU_LOGS" Name="logs" />
+      </Directory>
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="YunshuMenu" Name="云枢运维平台" />
+    </StandardDirectory>
+
+    <!-- 程序、PATH 与服务 -->
+    <Component Id="ServiceExe" Directory="INSTALLFOLDER" Guid="E98AEE88-36E9-496F-9423-26EC5DE964F2">
+      <File Id="YunshuExe" Source="$(var.AppDir)\yunshu.exe" KeyPath="yes" />
+      <ServiceInstall Id="YunshuService" Name="Yunshu" DisplayName="云枢运维平台"
+                      Description="云枢运维平台（页面、接口与内嵌 Worker）。配置文件 %ProgramData%\Yunshu\yunshu.env。"
+                      Type="ownProcess" Start="auto" ErrorControl="normal" Vital="yes"
+                      Account="NT SERVICE\Yunshu" Arguments="service" />
+      <!-- 启动不等待：首次启动或升级时可能要先备份并升级数据库结构；启动情况看服务状态与日志 -->
+      <ServiceControl Id="YunshuStart" Name="Yunshu" Start="install" Wait="no" />
+      <!-- 停止要等待：让内嵌 Worker 结束并释放锁，再替换 / 删除程序文件 -->
+      <ServiceControl Id="YunshuStopRemove" Name="Yunshu" Stop="both" Remove="uninstall" Wait="yes" />
+      <Environment Id="PathEntry" Name="PATH" Value="[INSTALLFOLDER]" Part="last" Action="set" System="yes" Permanent="no" />
+    </Component>
+
+    <!--
+      服务的其余设置用系统自带的 sc.exe 写入（在 InstallServices 之后、StartServices 之前，以 SYSTEM 运行）：
+        延迟自动启动；失败后 10 秒 / 30 秒 / 60 秒重启、一天后清零计数；
+        服务以错误码自行停止（启动失败、运行中意外退出）也算失败、同样重启；服务 SID 类型 unrestricted。
+      不用 MSI 自带的 MsiServiceConfig 表：Windows Installer SDK 注明它不能按预期工作（WiX 构建时也会警告）。
+    -->
+    <SetProperty Id="ConfigureYunshuService" Sequence="execute" Before="ConfigureYunshuService"
+                 Value="&quot;[System64Folder]cmd.exe&quot; /d /c sc.exe config Yunshu start= delayed-auto &amp;&amp; sc.exe failure Yunshu reset= 86400 actions= restart/10000/restart/30000/restart/60000 &amp;&amp; sc.exe failureflag Yunshu 1 &amp;&amp; sc.exe sidtype Yunshu unrestricted" />
+    <CustomAction Id="ConfigureYunshuService" BinaryRef="Wix4UtilCA_X64" DllEntry="WixQuietExec"
+                  Execute="deferred" Impersonate="no" Return="check" />
+    <InstallExecuteSequence>
+      <Custom Action="ConfigureYunshuService" After="InstallServices" Condition="$ServiceExe = 3" />
+    </InstallExecuteSequence>
+
+    <!--
+      ProgramData\Yunshu 的权限（SDDL，受保护、不继承 ProgramData 默认给 Users 的写权限）：
+        Yunshu\        SYSTEM、Administrators 完全控制；服务账号只读（读 yunshu.env）
+        data\ logs\    再加服务账号修改
+        keys\          只有 SYSTEM、Administrators、服务账号（app/crypto.py 再把 master.key 本身收紧到同样三者）
+      普通用户没有任何权限（yunshu.env 里可能有 PostgreSQL 口令）。
+      这些都是永久组件：卸载与升级都不删除。
+    -->
+    <Component Id="RootDir" Directory="YUNSHU_ROOT" Guid="FE882B65-E3C1-4FE1-8A20-5470A17D333D" Permanent="yes" KeyPath="yes">
+      <CreateFolder>
+        <PermissionEx Sddl="D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;0x1200a9;;;$(var.ServiceSid))" />
+      </CreateFolder>
+    </Component>
+    <Component Id="DataDir" Directory="YUNSHU_DATA" Guid="FEE7B419-C771-4A74-821E-F49BBD142D0F" Permanent="yes" KeyPath="yes">
+      <CreateFolder>
+        <PermissionEx Sddl="D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;0x1301bf;;;$(var.ServiceSid))" />
+      </CreateFolder>
+    </Component>
+    <Component Id="LogsDir" Directory="YUNSHU_LOGS" Guid="FF445669-2251-4E8F-B2B0-47E7902FD7A1" Permanent="yes" KeyPath="yes">
+      <CreateFolder>
+        <PermissionEx Sddl="D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;0x1301bf;;;$(var.ServiceSid))" />
+      </CreateFolder>
+    </Component>
+    <Component Id="KeysDir" Directory="YUNSHU_KEYS" Guid="CC38BE04-1A50-4FD7-BEBF-3F0161632A75" Permanent="yes" KeyPath="yes">
+      <CreateFolder>
+        <PermissionEx Sddl="D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;FA;;;$(var.ServiceSid))" />
+      </CreateFolder>
+    </Component>
+    <!-- 默认配置：文件已存在时不安装（NeverOverwrite），卸载时不删除（Permanent），升级永远不覆盖管理员的修改 -->
+    <Component Id="DefaultConfig" Directory="YUNSHU_ROOT" Guid="3E420BF5-FB1E-43AC-A6D2-FA5B9C88FA28" Permanent="yes" NeverOverwrite="yes">
+      <File Id="YunshuEnv" Name="yunshu.env" Source="$(sys.SOURCEFILEDIR)yunshu.env" KeyPath="yes" />
+    </Component>
+
+    <!-- 开始菜单：浏览器打开本机页面；命令行窗口（右键“以管理员身份运行”后可执行 yunshu backup create 等） -->
+    <Component Id="MenuShortcuts" Directory="YunshuMenu" Guid="5B2C2A39-6F4E-4B3D-9C0B-7E61D4B8A0F2">
+      <util:InternetShortcut Id="OpenWeb" Name="打开云枢运维平台" Target="http://localhost:8080/" Type="url" />
+      <Shortcut Id="CliShortcut" Name="云枢命令行" Description="打开命令行窗口运行 yunshu.exe（维护命令请以管理员身份运行）"
+                Target="[System64Folder]cmd.exe" Arguments="/k &quot;&quot;[INSTALLFOLDER]yunshu.exe&quot; help&quot;"
+                WorkingDirectory="INSTALLFOLDER" />
+      <RemoveFolder Id="RemoveYunshuMenu" On="uninstall" />
+      <RegistryValue Root="HKLM" Key="Software\Yunshu" Name="StartMenu" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+
+    <!-- 可选：入站防火墙规则 TCP 8080，默认不安装（Level 大于 INSTALLLEVEL）。静默安装加 ADDLOCAL=ALL 打开 -->
+    <Component Id="FirewallRule" Directory="INSTALLFOLDER" Guid="2D7B9E44-81C3-4F0A-B6E5-0A9C3F1D7E58">
+      <fire:FirewallException Id="YunshuHttp" Name="云枢运维平台 (TCP 8080)" Description="允许其他电脑访问云枢运维平台的页面与接口"
+                              Port="8080" Protocol="tcp" Scope="any" Profile="all" />
+      <RegistryValue Root="HKLM" Key="Software\Yunshu" Name="FirewallRule" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+
+    <Feature Id="Main" Title="云枢运维平台" Description="程序、Windows 服务 Yunshu、开始菜单与 PATH。"
+             Level="1" Display="expand" ConfigurableDirectory="INSTALLFOLDER" AllowAbsent="no">
+      <ComponentGroupRef Id="AppFiles" />
+      <ComponentRef Id="ServiceExe" />
+      <ComponentRef Id="RootDir" />
+      <ComponentRef Id="DataDir" />
+      <ComponentRef Id="LogsDir" />
+      <ComponentRef Id="KeysDir" />
+      <ComponentRef Id="DefaultConfig" />
+      <ComponentRef Id="MenuShortcuts" />
+      <Feature Id="Firewall" Title="Windows 防火墙规则（TCP 8080 入站）"
+               Description="允许其他电脑访问 8080 端口。默认不安装；修改了 YUNSHU_PORT 时请自行放行对应端口。"
+               Level="1000" AllowAbsent="yes">
+        <ComponentRef Id="FirewallRule" />
+      </Feature>
+    </Feature>
+
+    <ui:WixUI Id="WixUI_FeatureTree" />
+    <WixVariable Id="WixUILicenseRtf" Value="$(var.LicenseRtf)" />
+  </Package>
+</Wix>

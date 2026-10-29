@@ -1,0 +1,33 @@
+@@yunshu@@hostname
+fake-openwrt
+@@yunshu@@os
+DISTRIB_ID='OpenWrt'
+DISTRIB_RELEASE='23.05.3'
+DISTRIB_DESCRIPTION='OpenWrt 23.05.3 r23809-234f1a2efa'
+@@yunshu@@uptime
+3600.00 3000.00
+@@yunshu@@loadavg
+0.05 0.03 0.01 1/80 2000
+@@yunshu@@stat
+cpu  200 0 100 9600 0 0 100 0 0 0
+@@yunshu@@meminfo
+MemTotal:         250000 kB
+MemFree:          100000 kB
+Buffers:           10000 kB
+Cached:            40000 kB
+SwapTotal:             0 kB
+SwapFree:              0 kB
+@@yunshu@@df
+Filesystem           1024-blocks      Used Available Capacity Mounted on
+/dev/root                 4096      4096         0 100% /rom
+tmpfs                   125000       200    124800   0% /tmp
+/dev/ubi0_1              20000      5000     15000  25% /overlay
+overlayfs:/overlay       20000      5000     15000  25% /
+@@yunshu@@netdev
+Inter-|   Receive                                                |  Transmit
+ face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed
+br-lan: 300000 3000 0 0 0 0 0 0 600000 4000 0 0 0 0 0 0
+  wan: 900000 6000 0 0 0 0 0 0 100000 900 0 0 0 0 0 0
+@@yunshu@@thermal
+@@yunshu@@nproc
+2

@@ -1,0 +1,73 @@
+# 云枢 4.1 大型企业档：连接独立运维的 PostgreSQL（16 或 17，含高可用与备份策略），API + 1 个调度 Worker + 多个执行 Worker。
+# 准备：cp .env.example .env，填写 YUNSHU_DATABASE_URL；数据库需是空库或本平台已有的库。
+# 执行 Worker 数量按资产规模调整：docker compose up -d --scale executor=N。
+# 主密钥卷建议改为宿主目录或密钥管理系统挂载，并纳入单独的备份流程。
+x-yunshu: &yunshu
+  image: ${YUNSHU_IMAGE:-ghcr.io/kongbai9420/yunshu:4.4.0-beta.1}
+  volumes:
+    - yunshu-data:/data
+    - yunshu-keys:/etc/yunshu
+  environment: &yunshu-env
+    YUNSHU_DATABASE_URL: ${YUNSHU_DATABASE_URL:?请在 .env 里设置 YUNSHU_DATABASE_URL}
+    YUNSHU_SECURE_COOKIES: ${YUNSHU_SECURE_COOKIES:-1}
+    # 外部数据库通常有自己的备份；平台定时 pg_dump 可按需关闭（0）
+    YUNSHU_BACKUP_INTERVAL_HOURS: ${YUNSHU_BACKUP_INTERVAL_HOURS:-24}
+    # 平台时区，影响每日报告、巡检计划的时间（镜像默认北京时间）
+    # TZ: Asia/Shanghai
+    # 反向代理不在本机 / 本容器时填代理地址（多个用逗号分隔），平台才采信转发的真实客户端地址；不要设成 *
+    # FORWARDED_ALLOW_IPS: "代理的 IP"
+  # 标准输出日志按大小轮转，避免长期运行把磁盘写满（docker logs 仍可查看最近的）
+  logging: &yunshu-log
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "5"
+
+services:
+  migrate:
+    <<: *yunshu
+    command: ["migrate"]
+    restart: "no"
+  api:
+    <<: *yunshu
+    command: ["api"]
+    ports:
+      - "8080:8080"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+  scheduler:
+    # 负责定时计划与回收过期租约，同时也执行任务；多个实例时只有一个持有调度锁
+    <<: *yunshu
+    command: ["worker"]
+    # 接收 SNMP Trap（可选，默认关闭）：只在这一个服务上打开，见 deploy/README.md“接收服务器告警推送”
+    # ports:
+    #   - "162:1162/udp"
+    # environment:
+    #   <<: *yunshu-env
+    #   YUNSHU_SNMP_TRAP: "1"
+    #   YUNSHU_SNMP_TRAP_TARGET: "BMC 能访问到的本机 IP"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+  executor:
+    <<: *yunshu
+    command: ["worker"]
+    environment:
+      <<: *yunshu-env
+      YUNSHU_WORKER_ROLE: executor
+    deploy:
+      replicas: 2
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+# 卷名固定（不随所在目录变化）
+volumes:
+  yunshu-data:
+    name: yunshu-data
+  yunshu-keys:
+    name: yunshu-keys

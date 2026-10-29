@@ -1,0 +1,22 @@
+.git
+.github
+logs
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.log
+.DS_Store
+*.bat
+.idea
+.vscode
+
+# 4.0：本地依赖、构建产物和预览数据不进入镜像构建上下文
+frontend/node_modules
+frontend/dist
+frontend/test-results
+frontend/playwright-report
+backend/.venv
+backend/.preview
+backend/data
+**/.pytest_cache

@@ -1,0 +1,93 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Runtime logs & persistent caches
+logs/
+*.log
+sdr_cache/
+data/
+
+# Environment / local development
+apple-design-skill/
+.env
+.venv
+env/
+venv/
+ENV/
+
+# IDE & OS files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Local runtime data & credentials (3.x config.ini / users.json must never be committed)
+/config.ini
+users.json
+users.json.*
+config.ini.bak*
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+.env.*
+!.env.example
+*.key
+*.pem
+master.key
+master_key*
+secrets/
+*.pid
+
+# Build outputs, venvs, caches and binaries under artifacts/
+artifacts/**/build_venv/
+artifacts/**/test_venv*/
+artifacts/**/cache/
+artifacts/**/isolated_pip_cache/
+artifacts/**/linux-downloads/
+artifacts/**/dist/
+artifacts/**/sdist/
+artifacts/**/build_context/
+*.whl
+*.tar.gz
+*.zip
+# 浏览器测试用的伪造离线包（4.3 P18d），只含公开 CVE 数据与伪造设备
+!frontend/e2e/fixtures/*.zip
+
+# Screenshots produced by verification runs
+artifacts/**/*.png
+tests/browser/artifacts/
+node_modules/
+frontend/test-results/
+frontend/playwright-report/
+
+# scripts/preview.ps1 的本地预览数据与密钥
+.preview/
+artifacts/desktop/
+artifacts/p6-stability.json
+artifacts/supply-chain/
+
+# 本地预览截图
+.preview-shots/
+
+# ---- 本地产物（截图、报告、临时数据）不提交 ----
+# 维护者本机的开发约定文件，不放进公开仓库
+AGENTS.md
+CLAUDE.md
+artifacts/
+test-results/
+playwright-report/
+blob-report/
+frontend/dist/
+backend/.preview/
+**/.preview/
+*.log
+*.png.tmp
+.claude/
+.codex/
+*.local.md

@@ -1,0 +1,26 @@
+{
+  "_说明": "工具无法从元数据识别许可证的组件，人工核对后在此登记。按名称 + 精确版本匹配，版本变化必须重新核对；只补充已识别的许可证，不代表法律复核完成（license_review 仍为 pending）。",
+  "reviews": [
+    {
+      "name": "pysnmp",
+      "version": "7.1.30",
+      "license": "BSD-2-Clause",
+      "evidence": "PyPI 元数据未填写许可证；发布包 pysnmp-7.1.30.dist-info/licenses/LICENSE.rst 为两条款 BSD 文本（Ilya Etingof / LeXtudio Inc.）",
+      "reviewed_at": "2026-10-18"
+    },
+    {
+      "name": "python",
+      "version": "3.11.17",
+      "license": "PSF-2.0",
+      "evidence": "官方 python:3.11-slim 镜像中的 CPython 解释器二进制，按 CPython 发行许可（Python Software Foundation License Version 2）",
+      "reviewed_at": "2026-10-18"
+    },
+    {
+      "name": "yunshu-ops",
+      "version": "*",
+      "license": "MIT",
+      "evidence": "本项目自身（镜像根组件，版本为构建时的本地镜像标签）；仓库根目录 LICENSE 与 backend/pyproject.toml 均为 MIT。只对本项目自身允许通配版本",
+      "reviewed_at": "2026-10-18"
+    }
+  ]
+}

@@ -1,0 +1,245 @@
+name: CI 4.0
+
+# 4.x（backend/、frontend/）的测试与构建。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # release.yml 在标签上调用，作为发布前的完整测试门禁
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  desktop:
+    name: Desktop startup (Windows)
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements-desktop.lock
+            backend/requirements-dev.lock
+      - name: Install locked desktop and test dependencies
+        run: python -m pip install --require-hashes -r requirements-desktop.lock -r requirements-dev.lock
+      - name: Import GUI dependencies without opening a window
+        run: python -c "import webview; import clr"
+      - name: Test real local API and embedded worker lifecycle (fake tasks only)
+        run: python -m pytest tests/test_desktop.py -q
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Build frontend for portable package
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+      - name: Install locked packaging tools
+        run: python -m pip install --require-hashes -r requirements-package.lock
+      - name: Build and smoke-test the actual portable executable
+        working-directory: .
+        run: ./scripts/build-desktop.ps1
+
+      - name: Locate packaging environment for SBOM
+        id: packaging
+        run: python -c "import os,sysconfig; open(os.environ['GITHUB_OUTPUT'],'a').write('site_packages='+sysconfig.get_path('purelib')+'\n')"
+
+      - name: Download pinned Syft
+        id: syft
+        uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c
+        with:
+          syft-version: v1.54.1
+
+      - name: Download pinned Grype
+        id: grype
+        uses: anchore/scan-action/download-grype@27805bf3b4e84b4a5c980df22ed233c00390a439
+        with:
+          grype-version: v0.120.1
+          cache-db: 'true'
+
+      - name: Scan actual Windows packaging environment and bind ZIP checksum
+        working-directory: .
+        env:
+          SITE_PACKAGES: ${{ steps.packaging.outputs.site_packages }}
+          SYFT_CHECK_FOR_APP_UPDATE: 'false'
+          GRYPE_CHECK_FOR_APP_UPDATE: 'false'
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $out = 'artifacts/supply-chain/windows-build'
+          New-Item -ItemType Directory -Force $out | Out-Null
+          & '${{ steps.syft.outputs.cmd }}' "dir:$env:SITE_PACKAGES" -o "syft-json=$out/sbom.syft.json" -o "spdx-json=$out/sbom.spdx.json"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & '${{ steps.grype.outputs.cmd }}' "sbom:$out/sbom.syft.json" -o json --file "$out/scan.grype.json"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts/supply_chain_evidence.py --sbom "$out/sbom.spdx.json" --scan-input "$out/sbom.syft.json" --scan "$out/scan.grype.json" --output $out --scope desktop-build-environment --subject-file artifacts/desktop/Yunshu-windows-amd64.zip
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Archive Windows build environment evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: supply-chain-windows-build
+          path: artifacts/supply-chain/windows-build/
+          if-no-files-found: error
+          retention-days: 14
+
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout Repository
+        # v4.4.0
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Set up Python
+        # v7.0.0
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.lock
+            backend/requirements-dev.lock
+
+      - name: Install locked dependencies
+        run: python -m pip install --require-hashes -r requirements-dev.lock
+
+      - name: Run pytest
+        run: python -m pytest
+
+      - name: Validate deployment tier templates
+        # 4.1 P12：三套部署模板用 runner 自带的 docker compose 解析（只校验，不拉镜像、不启动）
+        working-directory: deploy
+        env:
+          POSTGRES_PASSWORD: fake-ci-password
+          YUNSHU_DATABASE_URL: postgresql+psycopg://yunshu:fake-ci-password@db.example.invalid:5432/yunshu
+        run: |
+          for tier in lite standard enterprise; do
+            docker compose -f "$tier/compose.yml" config --quiet
+          done
+
+  # 4.1 P8：同一套后端测试在 PostgreSQL 16 / 17 上运行（每个测试从迁移到最新版本的模板库克隆独立库）
+  backend-postgres:
+    name: backend (postgres ${{ matrix.pg }})
+    # 固定 24.04：ubuntu-latest 将迁移到 26，PostgreSQL 官方 apt 源的支持以发布为准
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - pg: '16'
+            image: postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d
+          - pg: '17'
+            image: postgres:17@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3
+    services:
+      postgres:
+        image: ${{ matrix.image }}
+        env:
+          # 只在 CI 临时容器内使用，不需要口令
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      YUNSHU_TEST_DATABASE_URL: postgresql+psycopg://postgres@127.0.0.1:5432/postgres
+      # 两个服务器版本都用 17 版 pg_dump / pg_restore（与镜像一致；新客户端可备份旧服务器）
+      YUNSHU_PG_BIN_DIR: /usr/lib/postgresql/17/bin
+    steps:
+      - name: Checkout Repository
+        # v4.4.0
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Set up Python
+        # v7.0.0
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements-standard-dev.lock
+
+      - name: Install locked dependencies (standard)
+        run: python -m pip install --require-hashes -r requirements-standard-dev.lock
+
+      - name: Install PostgreSQL 17 client tools (pg_dump / pg_restore)
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt noble-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-17
+          /usr/lib/postgresql/17/bin/pg_dump --version
+
+      - name: Run pytest on PostgreSQL
+        run: python -m pytest -q -p no:cacheprovider -rf --tb=short
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout Repository
+        # v4.4.0
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Set up Node.js
+        # v7.1.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Every control has help text
+        # 一句话说得清的写在控件下方，说不清的加「!」胶囊
+        run: npm run check:help
+
+      - name: Build
+        run: npm run build
+
+      - name: Set up Python for browser integration tests
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.11'
+
+      - name: Install backend test dependencies
+        run: python -m pip install --require-hashes -r ../backend/requirements-dev.lock
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser integration tests (fake devices only)
+        run: npm run test:e2e
+
+      - name: Upload browser test results on failure
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: playwright-test-results
+          path: frontend/test-results/
+          retention-days: 7
+          if-no-files-found: ignore

@@ -1,0 +1,164 @@
+name: 4.0 Image
+
+# 云枢运维平台镜像（docker/Dockerfile.ops）的构建、冒烟与供应链门禁。
+# - PR / 手动运行：amd64 / arm64 分别构建并冒烟（启动 API 与 Worker，检查 /api/health、/api/ready、
+#   页面、首次登录与 Worker 健康检查），生成 SBOM 与漏洞报告，不推送。
+# - 发布：由 release.yml 在 v*.*.* 标签上以 workflow_call 调用本工作流作为门禁（标签运行时
+#   evidence gate 强制生效），全部通过后由 release.yml 推送 ghcr.io/kongbai9420/yunshu（公开），
+#   打不可变版本标签（如 4.4.0-beta.1）、滚动别名（alpha / beta / rc），正式版另打 latest，
+#   并做签名与来源证明。本工作流不再响应标签，避免同一版本推送两次。
+
+on:
+  pull_request:
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'docker/**'
+      - '.github/workflows/ops-image.yml'
+      - '.dockerignore'
+      - 'scripts/supply_chain_evidence.py'
+      - 'scripts/license-reviews.json'
+      - 'scripts/vulnerability-exceptions.json'
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  image:
+    name: Smoke (${{ matrix.arch }})
+    runs-on: ubuntu-latest
+    env:
+      SC_DIR: artifacts/supply-chain/linux-${{ matrix.arch }}
+      SYFT_CHECK_FOR_APP_UPDATE: 'false'
+      GRYPE_CHECK_FOR_APP_UPDATE: 'false'
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+    steps:
+      - name: Checkout Repository
+        # v4.4.0
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Set up QEMU
+        if: matrix.arch == 'arm64'
+        # v3.7.0
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130
+        with:
+          platforms: arm64
+
+      - name: Set up Docker Buildx
+        # v3.12.0
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+
+      - name: Build for smoke test
+        # v5.4.0
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25
+        with:
+          context: .
+          file: ./docker/Dockerfile.ops
+          platforms: linux/${{ matrix.arch }}
+          load: true
+          push: false
+          tags: yunshu-ops:smoke
+          cache-from: type=gha,scope=ops-image-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=ops-image-${{ matrix.arch }}
+
+      - name: Download pinned Syft
+        id: syft
+        # sbom-action v0.24.3；只下载工具，不上传 release assets
+        uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c
+        with:
+          syft-version: v1.54.1
+
+      - name: Download pinned Grype
+        id: grype
+        # scan-action v7.4.2
+        uses: anchore/scan-action/download-grype@27805bf3b4e84b4a5c980df22ed233c00390a439
+        with:
+          grype-version: v0.120.1
+          cache-db: 'true'
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '20'
+
+      - name: Generate actual image and frontend SBOMs and vulnerability reports
+        run: |
+          set -eu
+          mkdir -p "$SC_DIR/image" "$SC_DIR/frontend"
+          "${{ steps.syft.outputs.cmd }}" docker:yunshu-ops:smoke -o "syft-json=$SC_DIR/image/sbom.syft.json" -o "spdx-json=$SC_DIR/image/sbom.spdx.json"
+          "${{ steps.grype.outputs.cmd }}" "sbom:$SC_DIR/image/sbom.syft.json" -o json --file "$SC_DIR/image/scan.grype.json"
+          (cd frontend && npm sbom --package-lock-only --sbom-format=cyclonedx) > "$SC_DIR/frontend/sbom.cdx.json"
+          "${{ steps.grype.outputs.cmd }}" "sbom:$SC_DIR/frontend/sbom.cdx.json" -o json --file "$SC_DIR/frontend/scan.grype.json"
+          docker image inspect -f '{{.Id}}' yunshu-ops:smoke > "$SC_DIR/image/image-id.txt"
+          "${{ steps.syft.outputs.cmd }}" version > "$SC_DIR/tools.txt"
+          "${{ steps.grype.outputs.cmd }}" version >> "$SC_DIR/tools.txt"
+
+      - name: Summarize evidence (tag releases enforce the evidence gate)
+        run: |
+          set -eu
+          enforce=()
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then enforce=(--enforce); fi
+          # 先都生成摘要，再统一判定，防止第一个目标阻断后漏掉第二份报告。
+          python scripts/supply_chain_evidence.py --sbom "$SC_DIR/image/sbom.spdx.json" --scan-input "$SC_DIR/image/sbom.syft.json" --scan "$SC_DIR/image/scan.grype.json" --output "$SC_DIR/image" --scope image --image-id "$(cat "$SC_DIR/image/image-id.txt")"
+          python scripts/supply_chain_evidence.py --sbom "$SC_DIR/frontend/sbom.cdx.json" --scan "$SC_DIR/frontend/scan.grype.json" --output "$SC_DIR/frontend" --scope frontend-lock --subject-file frontend/package-lock.json
+          if [[ ${#enforce[@]} -gt 0 ]]; then
+            python -c 'import json,sys,pathlib; p=pathlib.Path(sys.argv[1]); sys.exit(any(json.loads((p/s/"summary.json").read_text())["evidence_gate"] != "pass" for s in ("image","frontend")))' "$SC_DIR"
+          fi
+
+      - name: Archive supply chain reports even when a gate fails
+        if: always()
+        # v7.0.2；workflow artifact，非版本发布
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: supply-chain-linux-${{ matrix.arch }}
+          path: artifacts/supply-chain/linux-${{ matrix.arch }}/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Smoke test
+        env:
+          TARGET_ARCH: ${{ matrix.arch }}
+        run: |
+          set -eu
+          test "$(docker image inspect -f '{{.Architecture}}' yunshu-ops:smoke)" = "$TARGET_ARCH"
+          docker volume create smoke-data >/dev/null
+          docker volume create smoke-keys >/dev/null
+          docker run --platform "linux/$TARGET_ARCH" -d --name api -p 8080:8080 -v smoke-data:/data -v smoke-keys:/etc/yunshu -e YUNSHU_SETUP_WIZARD=0 yunshu-ops:smoke api
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8080/api/health; then break; fi
+            sleep 2
+          done
+          curl -fsS http://127.0.0.1:8080/api/health | grep -q '"status":"ok"'
+          # 就绪检查：数据库可用、结构版本与镜像一致
+          curl -fsS http://127.0.0.1:8080/api/ready | grep -q '"status":"ready"'
+          curl -fsS http://127.0.0.1:8080/ | grep -qi '<!doctype html'
+          # 首次启动应创建初始管理员，登录后要求改密码
+          curl -fsS -X POST -H 'Content-Type: application/json' -d '{"username":"admin","password":"admin123"}' \
+            http://127.0.0.1:8080/api/auth/login | grep -q '"require_password_change":true'
+          # 主密钥在单独的卷里，数据卷里没有密钥文件
+          docker exec api sh -c '! find /data -name "*.key" | grep -q .'
+          docker exec api test -s /etc/yunshu/master.key
+          # 同一镜像的 Worker 入口能启动并拿到单实例锁
+          docker run --platform "linux/$TARGET_ARCH" -d --name worker -v smoke-data:/data -v smoke-keys:/etc/yunshu -e YUNSHU_SETUP_WIZARD=0 yunshu-ops:smoke worker
+          # QEMU 下 Python 导入比原生慢，按就绪信号等待，不假定 10 秒内启动。
+          for i in $(seq 1 60); do
+            if docker logs worker 2>&1 | grep -q "Worker .* 启动"; then break; fi
+            test "$(docker inspect -f '{{.State.Running}}' worker)" = true
+            sleep 2
+          done
+          docker logs worker 2>&1 | grep -q "Worker .* 启动"
+          test "$(docker inspect -f '{{.State.Running}}' worker)" = true
+          # Worker 容器的健康检查读本容器的心跳；用镜像里登记的 HEALTHCHECK 命令本身来跑
+          hc="$(docker inspect -f '{{index .Config.Healthcheck.Test 3}}' worker)"
+          docker exec worker sh -c "$hc"
+          docker exec api sh -c "$hc"
+
+      - name: Show logs on failure
+        if: failure()
+        run: |
+          docker logs api || true
+          docker logs worker || true

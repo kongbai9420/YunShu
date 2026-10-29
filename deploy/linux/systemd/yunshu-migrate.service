@@ -1,0 +1,38 @@
+# 云枢运维平台：数据库结构升级（一次性）
+# 标准版（PostgreSQL）启动时只检查结构版本，不一致就拒绝启动，所以升级后要先运行本单元：
+#   sudo systemctl start yunshu-migrate
+# 启用后（sudo systemctl enable yunshu-migrate），每次启动 / 重启 yunshu-api 或 yunshu-worker 前都会先运行它
+# （RequiredBy= + Before=）。轻量版（SQLite）不需要启用：API 启动时会先备份再自动升级。
+# 一次性单元不设 Restart=：迁移失败应由人检查原因，不应反复重试（systemd 244 以前也不允许）。
+[Unit]
+Description=Yunshu ops platform database migration
+Documentation=file:///opt/yunshu/current/README.txt
+Wants=network-online.target
+After=network-online.target
+Before=yunshu-api.service yunshu-worker.service
+
+[Service]
+Type=oneshot
+User=yunshu
+Group=yunshu
+EnvironmentFile=/etc/yunshu/yunshu.env
+WorkingDirectory=/var/lib/yunshu
+ExecStart=/opt/yunshu/current/yunshu/yunshu migrate
+TimeoutStartSec=30min
+UMask=0027
+
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/yunshu /etc/yunshu /var/log/yunshu
+PrivateTmp=yes
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+RequiredBy=yunshu-api.service yunshu-worker.service

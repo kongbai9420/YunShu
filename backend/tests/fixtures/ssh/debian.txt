@@ -1,0 +1,36 @@
+@@yunshu@@hostname
+fake-debian
+@@yunshu@@os
+PRETTY_NAME="Debian GNU/Linux 12 (bookworm)"
+NAME="Debian GNU/Linux"
+ID=debian
+@@yunshu@@uptime
+86400.52 170000.10
+@@yunshu@@loadavg
+0.42 0.30 0.25 1/250 12345
+@@yunshu@@stat
+cpu  1000 0 500 8000 500 0 0 0 0 0
+@@yunshu@@meminfo
+MemTotal:        8000000 kB
+MemFree:         1000000 kB
+MemAvailable:    6000000 kB
+Buffers:          100000 kB
+Cached:          2000000 kB
+SwapTotal:       2000000 kB
+SwapFree:        1500000 kB
+@@yunshu@@df
+Filesystem     1024-blocks    Used Available Capacity Mounted on
+udev               4000000       0   4000000       0% /dev
+tmpfs               800000    1000    799000       1% /run
+/dev/sda1         10000000 2500000   7500000      25% /
+/dev/sdb1        100000000 50000000  50000000     50% /data
+@@yunshu@@netdev
+Inter-|   Receive                                                |  Transmit
+ face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed
+    lo: 1000 10 0 0 0 0 0 0 1000 10 0 0 0 0 0 0
+  eth0: 5000000000 4000000 2 0 0 0 0 0 7000000000 5000000 1 0 0 0 0 0
+@@yunshu@@thermal
+acpitz 27800
+x86_pkg_temp 52000
+@@yunshu@@nproc
+4

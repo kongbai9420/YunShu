@@ -1,0 +1,23 @@
+# CI：在发行版官方镜像上加装 systemd，让它以 1 号进程运行，用来测试 install.sh、systemd 单元、升级、回滚与卸载。
+# 只在 GitHub Actions 里用（docker run --privileged），不随安装包分发。
+#   docker build --build-arg BASE=debian:12@sha256:... -f deploy/linux/ci/Dockerfile.systemd -t yunshu-ci-systemd deploy/linux/ci
+ARG BASE
+FROM ${BASE}
+ENV container=docker
+# 最后一步屏蔽容器里用不到的终端与内核相关单元，以免拖慢启动
+RUN set -eux; \
+    if command -v apt-get >/dev/null; then \
+        apt-get update; \
+        DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            systemd systemd-sysv dbus ca-certificates curl tar gzip passwd util-linux findutils; \
+        rm -rf /var/lib/apt/lists/*; \
+    else \
+        dnf install -y systemd /usr/bin/tar /usr/bin/gzip /usr/sbin/useradd /usr/sbin/runuser /usr/bin/find; \
+        command -v curl >/dev/null || dnf install -y /usr/bin/curl; \
+        dnf clean all; \
+    fi; \
+    systemctl mask getty.target console-getty.service \
+        systemd-udevd.service systemd-udev-trigger.service systemd-modules-load.service \
+        sys-kernel-debug.mount sys-kernel-tracing.mount 2>/dev/null || true
+STOPSIGNAL SIGRTMIN+3
+CMD ["/sbin/init"]

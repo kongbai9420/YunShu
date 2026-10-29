@@ -1,0 +1,36 @@
+# 云枢运维平台：独立 Worker（采集、告警、定时任务、SNMP Trap 接收）
+# 只在标准版（PostgreSQL，yunshu.env 里 YUNSHU_EMBEDDED_WORKER=0）时启用；轻量版由 API 内嵌运行，默认不启用本单元。
+# 健康检查：sudo yunshu worker --check（本机 Worker 90 秒内有心跳则返回 0）
+[Unit]
+Description=Yunshu ops platform worker
+Documentation=file:///opt/yunshu/current/README.txt
+Wants=network-online.target
+After=network-online.target yunshu-migrate.service
+
+[Service]
+Type=simple
+User=yunshu
+Group=yunshu
+EnvironmentFile=/etc/yunshu/yunshu.env
+WorkingDirectory=/var/lib/yunshu
+ExecStart=/opt/yunshu/current/yunshu/yunshu worker
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=90
+UMask=0027
+
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/yunshu /etc/yunshu /var/log/yunshu
+PrivateTmp=yes
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,80 @@
+# 云枢 4.1 标准档（中小企业推荐）：同一台主机上的 PostgreSQL 17 + 迁移任务 + API + 1 个 Worker。
+# 准备：cp .env.example .env，改掉 POSTGRES_PASSWORD；然后 docker compose up -d。
+# 升级版本：改镜像标签后 docker compose up -d，migrate 服务先完成结构升级，API / Worker 再启动（标准档启动时只检查版本）。
+x-yunshu: &yunshu
+  image: ${YUNSHU_IMAGE:-ghcr.io/kongbai9420/yunshu:4.4.0-beta.1}
+  volumes:
+    - yunshu-data:/data
+    - yunshu-keys:/etc/yunshu
+  environment: &yunshu-env
+    YUNSHU_DATABASE_URL: postgresql+psycopg://yunshu:${POSTGRES_PASSWORD:?请在 .env 里设置 POSTGRES_PASSWORD}@db:5432/yunshu
+    YUNSHU_SECURE_COOKIES: ${YUNSHU_SECURE_COOKIES:-0}
+    # 平台时区，影响每日报告、巡检计划的时间（镜像默认北京时间）
+    # TZ: Asia/Shanghai
+    # 反向代理不在本机 / 本容器时填代理地址（多个用逗号分隔），平台才采信转发的真实客户端地址；不要设成 *
+    # FORWARDED_ALLOW_IPS: "代理的 IP"
+  # 标准输出日志按大小轮转，避免长期运行把磁盘写满（docker logs 仍可查看最近的）
+  logging: &yunshu-log
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "5"
+
+services:
+  db:
+    # 按摘要固定（与 CI 测试用的同一个镜像）；升级 PostgreSQL 大版本前先看 deploy/README.md
+    image: postgres:17@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3
+    logging: *yunshu-log
+    environment:
+      POSTGRES_DB: yunshu
+      POSTGRES_USER: yunshu
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?请在 .env 里设置 POSTGRES_PASSWORD}
+    volumes:
+      - yunshu-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U yunshu -d yunshu"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+  migrate:
+    <<: *yunshu
+    command: ["migrate"]
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+  api:
+    <<: *yunshu
+    command: ["api"]
+    ports:
+      - "8080:8080"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+  worker:
+    <<: *yunshu
+    command: ["worker"]
+    # 接收 SNMP Trap（可选，默认关闭）：取消下面几行注释，见 deploy/README.md“接收服务器告警推送”
+    # ports:
+    #   - "162:1162/udp"
+    # environment:
+    #   <<: *yunshu-env
+    #   YUNSHU_SNMP_TRAP: "1"
+    #   YUNSHU_SNMP_TRAP_TARGET: "BMC 能访问到的本机 IP"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+# 卷名固定（不随所在目录变化）。从轻量版换到标准版时 yunshu-data / yunshu-keys 是同一份，SQLite 库留在原处供升级工具读取
+volumes:
+  yunshu-pg:
+    name: yunshu-pg
+  # 平台备份（pg_dump 文件）默认写在数据卷的 backups/ 下
+  yunshu-data:
+    name: yunshu-data
+  # 主密钥卷：请单独备份，丢失后已保存的设备密码无法解密
+  yunshu-keys:
+    name: yunshu-keys

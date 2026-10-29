@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>云枢运维平台</title>
+    <script>
+      // 首帧前按上次的外观恢复（风格、深浅、主题包变量、壁纸），避免闪烁；与 src/lib/theme.ts 的 apply 保持一致
+      try {
+        var root = document.documentElement
+        var a = JSON.parse(localStorage.getItem("yunshu-appearance") || "null")
+        if (a && a.base) {
+          root.setAttribute("data-style", a.base)
+          root.setAttribute("data-skin", a.id)
+          if (a.mode === "light" || a.mode === "dark") root.setAttribute("data-theme", a.mode)
+          var dark = a.mode === "dark" || (a.mode === "system" && matchMedia("(prefers-color-scheme: dark)").matches)
+          var tokens = a.tokens ? (dark ? a.tokens.dark : a.tokens.light) : {}
+          for (var k in tokens) root.style.setProperty("--" + k, tokens[k])
+          if (a.wallpaper) {
+            root.style.setProperty("--app-wallpaper", 'url("' + a.wallpaper + '")')
+            root.setAttribute("data-wallpaper", "")
+          }
+        } else {
+          var t = localStorage.getItem("yunshu-theme")
+          if (t === "light" || t === "dark") root.setAttribute("data-theme", t)
+        }
+      } catch (e) {}
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

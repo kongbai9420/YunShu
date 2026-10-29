@@ -1,0 +1,369 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/* 深浅色默认跟随系统；顶栏可固定为浅色或深色（<html data-theme>，见 lib/theme.ts） */
+@custom-variant dark {
+  &:where([data-theme="dark"], [data-theme="dark"] *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme="light"]), :root:not([data-theme="light"]) *) {
+      @slot;
+    }
+  }
+}
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --font-sans: var(--font-system);
+  --font-mono: var(--font-code);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-active: var(--primary-active);
+  --color-destructive-solid: var(--destructive-solid);
+  --color-destructive-solid-hover: var(--destructive-solid-hover);
+  --color-secondary-hover: var(--secondary-hover);
+  --color-accent-strong: var(--accent-strong);
+  --color-disabled: var(--disabled);
+  --color-disabled-foreground: var(--disabled-foreground);
+  --shadow-modal: var(--modal-shadow);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-titlebar: var(--titlebar);
+  --shadow-card: var(--card-shadow);
+  --shadow-card-hover: var(--card-shadow-hover);
+  --color-link: var(--link);
+  --color-ok: var(--status-ok);
+  --color-warn: var(--status-warn);
+  --color-bad: var(--status-bad);
+  --color-info: var(--status-info);
+  --color-manual: var(--status-manual);
+  --color-neutral: var(--status-neutral);
+  --color-ok-bg: var(--status-ok-bg);
+  --color-warn-bg: var(--status-warn-bg);
+  --color-bad-bg: var(--status-bad-bg);
+  --color-info-bg: var(--status-info-bg);
+  --color-manual-bg: var(--status-manual-bg);
+  --color-neutral-bg: var(--status-neutral-bg);
+}
+
+/*
+ * 色彩 token 取自旧版 src/ui/styles.css 的 Apple 系统色变量（--system-*、--bg-*、--surface-*、--text-*、--border-*）。
+ * 改动只有一类：承载文字或状态图标的颜色换成同色系的高对比版本，使正文达到 4.5:1。
+ */
+:root {
+  --font-system: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei UI", "Segoe UI", system-ui, sans-serif;
+  --font-code: "SF Mono", "JetBrains Mono", Consolas, "Liberation Mono", Menlo, monospace;
+  --radius: 0.75rem; /* 旧版卡片 12px */
+
+  --background: #f5f5f7; /* --bg-window */
+  --foreground: #1d1d1f; /* --text-primary */
+  --card: #ffffff; /* --surface-primary */
+  --card-foreground: #1d1d1f;
+  --popover: #ffffff;
+  --popover-foreground: #1d1d1f;
+  --primary: #0062cc; /* --system-blue-hover：白字 5.8:1（--system-blue #007AFF 只有 4.0:1） */
+  --primary-foreground: #ffffff;
+  --primary-hover: #0058b8; /* 悬停、按下逐级加深，白字对比度只升不降 */
+  --primary-active: #004fa5;
+  --destructive-solid: #d70015; /* 危险按钮底色：白字 5.4:1，深浅色共用 */
+  --destructive-solid-hover: #b8000f;
+  --secondary-hover: #e5e5ea;
+  --accent-strong: rgba(0, 0, 0, 0.08); /* --surface-active */
+  /* 禁用：灰底灰字，不靠透明度，避免与可用按钮混淆（禁用控件不受 4.5:1 约束） */
+  --disabled: #ebebf0;
+  --disabled-foreground: #9c9ca1;
+  --modal-shadow: 0 24px 60px rgba(0, 0, 0, 0.28); /* 旧版 .apple-modal-card */
+  --secondary: #f2f2f7; /* --surface-secondary */
+  --secondary-foreground: #1d1d1f;
+  --muted: #f2f2f7;
+  --muted-foreground: #6e6e73; /* --text-secondary：#F2F2F7 上 4.5:1；不用 --text-tertiary（白底 3.6:1） */
+  --accent: rgba(0, 0, 0, 0.05); /* --surface-hover */
+  --accent-foreground: #1d1d1f;
+  --destructive: #d70015;
+  --border: rgba(0, 0, 0, 0.1);
+  --input: rgba(0, 0, 0, 0.16); /* --border-strong */
+  --ring: #007aff; /* --system-blue */
+  --sidebar: rgba(242, 242, 247, 0.85); /* --bg-sidebar，配合 backdrop-blur */
+  --titlebar: rgba(246, 246, 246, 0.88); /* --bg-titlebar */
+  --link: #0062cc;
+
+  /* 状态色：系统色的高对比版本，用于图标与文字；底色沿用 --system-*-bg 的透明度 */
+  --status-ok: #248a3d;
+  --status-warn: #c93400;
+  --status-bad: #d70015;
+  --status-info: #0062cc;
+  --status-manual: #8944ab;
+  --status-neutral: #6e6e73;
+  --status-ok-bg: rgba(52, 199, 89, 0.12);
+  --status-warn-bg: rgba(255, 149, 0, 0.14);
+  --status-bad-bg: rgba(255, 59, 48, 0.12);
+  --status-info-bg: rgba(0, 122, 255, 0.1);
+  --status-manual-bg: rgba(175, 82, 222, 0.12);
+  --status-neutral-bg: rgba(142, 142, 147, 0.14);
+
+  --card-shadow: 0 4px 20px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02);
+  --card-shadow-hover: 0 8px 26px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.04);
+  color-scheme: light dark;
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+/* 暗色 token：跟随系统时用媒体查询，手动选择深色时用 data-theme；两处内容保持一致 */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --background: #161618;
+    --foreground: #f5f5f7;
+    --card: #212124;
+    --card-foreground: #f5f5f7;
+    --popover: #2c2c2e;
+    --popover-foreground: #f5f5f7;
+    --primary: #0062cc; /* 不用旧版暗色 #0A84FF：白字只有 3.6:1；暗色下链接与信息色另用 #409cff */
+    --primary-foreground: #ffffff;
+    --primary-hover: #0058b8;
+    --primary-active: #004fa5;
+    --destructive-solid: #d70015;
+    --destructive-solid-hover: #b8000f;
+    --secondary-hover: #3a3a3c;
+    --accent-strong: rgba(255, 255, 255, 0.1);
+    --disabled: rgba(255, 255, 255, 0.06);
+    --disabled-foreground: #6e6e73;
+    --modal-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+    --secondary: #2c2c2e;
+    --secondary-foreground: #f5f5f7;
+    --muted: #2c2c2e;
+    --muted-foreground: #a1a1a6;
+    --accent: rgba(255, 255, 255, 0.07);
+    --accent-foreground: #f5f5f7;
+    --destructive: #ff453a;
+    --border: rgba(255, 255, 255, 0.1);
+    --input: rgba(255, 255, 255, 0.18);
+    --ring: #0a84ff;
+    --sidebar: rgba(26, 26, 28, 0.88);
+    --titlebar: rgba(32, 32, 35, 0.88);
+    --link: #409cff;
+
+    --status-ok: #30d158;
+    --status-warn: #ff9f0a;
+    --status-bad: #ff453a;
+    --status-info: #409cff;
+    --status-manual: #bf5af2;
+    --status-neutral: #98989d;
+    --status-ok-bg: rgba(48, 209, 88, 0.16);
+    --status-warn-bg: rgba(255, 159, 10, 0.16);
+    --status-bad-bg: rgba(255, 69, 58, 0.16);
+    --status-info-bg: rgba(10, 132, 255, 0.18);
+    --status-manual-bg: rgba(191, 90, 242, 0.18);
+    --status-neutral-bg: rgba(152, 152, 157, 0.18);
+    --card-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+    --card-shadow-hover: 0 8px 30px rgba(0, 0, 0, 0.5);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --background: #161618;
+  --foreground: #f5f5f7;
+  --card: #212124;
+  --card-foreground: #f5f5f7;
+  --popover: #2c2c2e;
+  --popover-foreground: #f5f5f7;
+  --primary: #0062cc; /* 不用旧版暗色 #0A84FF：白字只有 3.6:1；暗色下链接与信息色另用 #409cff */
+  --primary-foreground: #ffffff;
+  --primary-hover: #0058b8;
+  --primary-active: #004fa5;
+  --destructive-solid: #d70015;
+  --destructive-solid-hover: #b8000f;
+  --secondary-hover: #3a3a3c;
+  --accent-strong: rgba(255, 255, 255, 0.1);
+  --disabled: rgba(255, 255, 255, 0.06);
+  --disabled-foreground: #6e6e73;
+  --modal-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+  --secondary: #2c2c2e;
+  --secondary-foreground: #f5f5f7;
+  --muted: #2c2c2e;
+  --muted-foreground: #a1a1a6;
+  --accent: rgba(255, 255, 255, 0.07);
+  --accent-foreground: #f5f5f7;
+  --destructive: #ff453a;
+  --border: rgba(255, 255, 255, 0.1);
+  --input: rgba(255, 255, 255, 0.18);
+  --ring: #0a84ff;
+  --sidebar: rgba(26, 26, 28, 0.88);
+  --titlebar: rgba(32, 32, 35, 0.88);
+  --link: #409cff;
+
+  --status-ok: #30d158;
+  --status-warn: #ff9f0a;
+  --status-bad: #ff453a;
+  --status-info: #409cff;
+  --status-manual: #bf5af2;
+  --status-neutral: #98989d;
+  --status-ok-bg: rgba(48, 209, 88, 0.16);
+  --status-warn-bg: rgba(255, 159, 10, 0.16);
+  --status-bad-bg: rgba(255, 69, 58, 0.16);
+  --status-info-bg: rgba(10, 132, 255, 0.18);
+  --status-manual-bg: rgba(191, 90, 242, 0.18);
+  --status-neutral-bg: rgba(152, 152, 157, 0.18);
+  --card-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+  --card-shadow-hover: 0 8px 30px rgba(0, 0, 0, 0.5);
+  color-scheme: dark;
+}
+
+/* 增强对比度：加深分隔线与次要文字 */
+@media (prefers-contrast: more) {
+  :root {
+    --border: rgba(0, 0, 0, 0.32);
+    --input: rgba(0, 0, 0, 0.4);
+    --muted-foreground: #48484a;
+  }
+}
+@media (prefers-contrast: more) and (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --border: rgba(255, 255, 255, 0.36);
+    --input: rgba(255, 255, 255, 0.44);
+    --muted-foreground: #d1d1d6;
+  }
+}
+@media (prefers-contrast: more) {
+  :root[data-theme="dark"] {
+    --border: rgba(255, 255, 255, 0.36);
+    --input: rgba(255, 255, 255, 0.44);
+    --muted-foreground: #d1d1d6;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-size: 0.8125rem; /* 旧版正文 13px */
+    line-height: 1.45;
+  }
+  /* 键盘焦点：所有可交互元素统一 2px 系统蓝描边 */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* react-grid-layout：占位块与缩放手柄用主题色 */
+.react-grid-item.react-grid-placeholder {
+  background: var(--ring) !important;
+  opacity: 0.18 !important;
+  border-radius: var(--radius);
+}
+.react-grid-item > .react-resizable-handle {
+  opacity: 1 !important;
+}
+.react-grid-item > .react-resizable-handle::after {
+  border-color: var(--muted-foreground) !important;
+}
+
+/* React Flow：对齐主题 token */
+.react-flow {
+  --xy-background-color: var(--background);
+  --xy-background-pattern-color: var(--input);
+  --xy-node-background-color: var(--card);
+  --xy-node-border: 1px solid var(--border);
+  --xy-node-color: var(--foreground);
+  --xy-minimap-background-color: var(--card);
+  --xy-controls-button-background-color: var(--card);
+  --xy-controls-button-background-color-hover: var(--secondary);
+  --xy-controls-button-color: var(--foreground);
+  --xy-controls-button-color-hover: var(--foreground);
+  --xy-controls-button-border-color: var(--border);
+  --xy-edge-label-background-color: var(--card);
+  --xy-edge-label-color: var(--foreground);
+  --xy-attribution-background-color: transparent;
+}
+/* 连线端点：可见 12px，点击区域扩到 28px（桌面最小 20px） */
+.react-flow__handle::after {
+  content: "";
+  position: absolute;
+  inset: -8px;
+  border-radius: 9999px;
+}
+.react-flow__node:focus-visible,
+.react-flow__edge:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* 减少动效：关掉网格、抽屉等过渡动画 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/*
+ * 数据表格：对照旧版 .apple-table。表头灰底、11.5px 次要色粗体，单元格 10px×16px、12.5px 字，
+ * 行间 1px 细分隔线，悬停整行浅灰。外框（圆角、边框、横向滚动）由外层 panelClass 容器负责。
+ * 单元格不要再写 px-/py-，否则会盖掉这里的统一内边距；需要更紧凑时加 data-table-compact。
+ */
+@layer components {
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+    font-size: 0.78125rem;
+  }
+  .data-table thead th {
+    background: var(--secondary);
+    color: var(--muted-foreground);
+    font-size: 0.71875rem;
+    font-weight: 600;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+  }
+  .data-table tbody > tr > :is(th, td) {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    font-weight: inherit;
+    vertical-align: middle;
+    transition: background-color 0.15s ease;
+  }
+  .data-table tbody > tr:last-child > :is(th, td) {
+    border-bottom: 0;
+  }
+  .data-table tbody > tr:hover > :is(th, td) {
+    background: var(--accent);
+  }
+  .data-table-compact thead th,
+  .data-table-compact tbody > tr > :is(th, td) {
+    padding: 6px 12px;
+  }
+}

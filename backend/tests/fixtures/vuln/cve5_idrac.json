@@ -1,0 +1,55 @@
+{
+  "dataType": "CVE_RECORD",
+  "dataVersion": "5.1",
+  "cveMetadata": {
+    "cveId": "CVE-2026-50020",
+    "assignerShortName": "dell",
+    "state": "PUBLISHED",
+    "datePublished": "2026-10-20T04:10:00.000Z",
+    "dateUpdated": "2026-10-20T04:12:00.000Z"
+  },
+  "containers": {
+    "cna": {
+      "affected": [
+        {
+          "defaultStatus": "unaffected",
+          "product": "Integrated Dell Remote Access Controller 9",
+          "vendor": "Dell",
+          "versions": [
+            {"lessThan": "7.00.00.172", "status": "affected", "version": "N/A", "versionType": "semver"},
+            {"lessThan": "7.10.50.00", "status": "affected", "version": "N/A", "versionType": "semver"}
+          ]
+        },
+        {
+          "defaultStatus": "unaffected",
+          "product": "Fake Unrelated Product",
+          "vendor": "Fake Vendor",
+          "versions": [{"lessThan": "2.0", "status": "affected", "version": "1.0", "versionType": "semver"}]
+        }
+      ],
+      "descriptions": [
+        {"lang": "en", "value": "Fake iDRAC9 web interface flaw. A remote unauthenticated attacker could execute code. This record is test data."}
+      ],
+      "metrics": [
+        {"cvssV3_1": {"baseScore": 9.8, "baseSeverity": "CRITICAL", "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H", "version": "3.1"}, "format": "CVSS"}
+      ],
+      "solutions": [{"lang": "en", "value": "Upgrade iDRAC9 firmware to 7.00.00.172 or 7.10.50.00 and later."}],
+      "workarounds": [{"lang": "en", "value": "Restrict access to the iDRAC web interface to a dedicated management network."}],
+      "references": [
+        {"tags": ["vendor-advisory"], "url": "https://vendor.example.invalid/dsa-2026-0001"},
+        {"tags": ["technical-description"], "url": "https://blog.example.invalid/idrac"}
+      ],
+      "providerMetadata": {"orgId": "00000000-0000-0000-0000-000000000000", "shortName": "dell"}
+    },
+    "adp": [
+      {
+        "metrics": [
+          {"other": {"type": "ssvc", "content": {"options": [{"Exploitation": "active"}]}}},
+          {"other": {"type": "kev", "content": {"dateAdded": "2026-10-20", "reference": "https://www.cisa.gov/known-exploited-vulnerabilities-catalog"}}}
+        ],
+        "providerMetadata": {"orgId": "00000000-0000-0000-0000-000000000001", "shortName": "CISA-ADP"},
+        "title": "CISA ADP Vulnrichment"
+      }
+    ]
+  }
+}

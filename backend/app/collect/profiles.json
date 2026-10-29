@@ -1,0 +1,98 @@
+[
+  {
+    "name": "linux", "label": "Debian / Ubuntu", "batch": "A", "interval": 60,
+    "steps": [{"protocol": "snmp"}, {"protocol": "ssh", "mode": "fallback"}],
+    "platforms": ["Debian", "Ubuntu"], "metrics": ["CPU", "内存", "磁盘", "负载", "接口流量与错误", "运行时间", "温度（按能力）"],
+    "prerequisites": "SNMP v2c/v3 只读凭据与 HOST-RESOURCES/IF-MIB；可选 SSH 普通账号读取 /proc、/sys、df。只有 SSH 端点时直接使用 SSH。",
+    "limitations": "SNMP CPU 依赖处理器 MIB；接口速率需要两次有效采样。无传感器的主机不显示温度。",
+    "evidence": "SNMP v2c/v3 本机模拟器；Debian 文本回放与本机 SSH 协议服务器。未实机验证。"
+  },
+  {
+    "name": "openwrt", "label": "OpenWrt / ImmortalWrt / iStoreOS", "batch": "A", "interval": 60,
+    "steps": [{"protocol": "snmp"}, {"protocol": "ssh", "mode": "fallback"}],
+    "platforms": ["OpenWrt", "ImmortalWrt", "iStoreOS"], "metrics": ["CPU", "内存", "接口流量与错误", "运行时间"],
+    "prerequisites": "已启用只读 SNMP 或 SSH；SSH 命令兼容 BusyBox。",
+    "limitations": "无线、蜂窝和厂商专用信息不在此模板范围内；没有开放接口的设备改用可达性模板。",
+    "evidence": "OpenWrt 文本回放与本机 SSH 协议服务器；派生系统尚无单独样本。未实机验证。"
+  },
+  {
+    "name": "snmp-switch", "label": "标准 MIB 交换机 / 路由器", "batch": "A", "interval": 60,
+    "steps": [{"protocol": "snmp"}],
+    "platforms": ["标准 MIB 网络设备"], "metrics": ["系统身份", "运行时间", "接口状态", "64 位接口流量", "接口错误", "LLDP 邻居观察"],
+    "prerequisites": "只读 SNMP v2c/v3；系统 MIB、IF-MIB / IF-X-MIB。",
+    "limitations": "缺少 64 位计数器时流量标不支持；LLDP 保存原始邻居观察，不自动确认为物理直连；拓扑合并在 P3 实现。",
+    "evidence": "标准 MIB 伪造响应与 snmpsim v2c/v3。未实机验证。"
+  },
+  {
+    "name": "dell-server", "label": "Dell 服务器 / iDRAC9", "batch": "A", "interval": 60,
+    "steps": [{"protocol": "snmp"}, {"protocol": "ipmi", "mode": "fallback"}, {"protocol": "redfish", "mode": "supplement", "every": 10}],
+    "platforms": ["Dell BMC", "iDRAC9"], "metrics": ["整机健康", "温度", "实测 RPM", "电源状态", "功耗", "电源模块健康", "内存健康", "硬盘健康", "RAID 卷健康", "BMC 日志（SEL）"],
+    "prerequisites": "推荐在 iDRAC 开启 SNMP 代理并使用 SNMPv3（认证 + 加密）只读账号；可选 Redfish 只读权限与固定证书指纹；IPMI 只读账号作回退。",
+    "limitations": "SNMP 为主（iDRAC MIB，无登录会话，不产生登录日志）；SNMP 不通时才用 IPMI（每次新建会话）。Redfish 每 10 个周期补充一次并读取 BMC 日志，会话令牌复用。MIB 字段取决于 iDRAC 代次与固件；不含电源或温控写操作。",
+    "evidence": "按 Dell 公开 MIB 定义编写的伪造 SNMP 响应、伪造 IPMI / Redfish 响应与会话测试；没有真实型号或固件验证记录。"
+  },
+  {
+    "name": "generic-bmc", "label": "通用 BMC（Redfish 首选、IPMI 兜底）", "batch": "A", "interval": 300,
+    "steps": [{"protocol": "redfish"}, {"protocol": "snmp", "mode": "supplement"}, {"protocol": "ipmi", "mode": "fallback"}],
+    "platforms": ["浪潮 / 新华三 / 华为 / 超聚变 / HPE / 联想等 BMC", "IPMI BMC"], "metrics": ["整机健康", "温度", "风扇", "功耗与电源状态", "硬盘与阵列健康", "BMC 日志（SEL）", "型号与固件"],
+    "prerequisites": "推荐 Redfish 只读账号（HTTPS，首次固定证书指纹）；IPMI 只读账号作为兜底；SNMP 为可选补充。",
+    "limitations": "4.4 P20a 起按采集计划执行：首次采集时探测每个协议能给出哪些数据，每项数据选一个主来源，主来源失败才用兜底；Redfish 与 IPMI 都会在 BMC 留下登录记录，因此默认 5 分钟采集一次，硬盘、阵列、日志与固件每 10 个周期读一次。通用 SNMP 只有标准 MIB，读不到这些品牌的硬件健康表。",
+    "evidence": "伪造 Redfish / IPMI 响应与 ipmitool 解析测试。未实机验证。"
+  },
+  {
+    "name": "pve", "label": "Proxmox VE", "batch": "B", "interval": 60,
+    "steps": [{"protocol": "pve-api"}, {"protocol": "ssh", "mode": "fallback"}],
+    "platforms": ["PVE"], "metrics": ["节点 CPU / 内存 / 负载", "运行时间", "存储使用率", "VM / LXC 状态与数量"],
+    "prerequisites": "PVEAuditor 只读 API 令牌或账号；默认端口 8006；可选 SSH 补充系统指标。",
+    "limitations": "SSH 降级只能提供主机指标，不能代替虚拟化 API；承载关系的确认与拓扑在 P3 接入。",
+    "evidence": "httpx 模拟 REST 接口、令牌与票据测试。未实机验证。"
+  },
+  {
+    "name": "esxi", "label": "VMware ESXi / vCenter", "batch": "B", "interval": 60,
+    "steps": [{"protocol": "esxi-api"}],
+    "platforms": ["ESXi", "vCenter"], "metrics": ["主机 CPU / 内存", "运行时间", "连接状态", "Datastore 使用率", "VM 电源状态"],
+    "prerequisites": "vSphere 只读角色、pyVmomi API 可达、首次信任并固定证书指纹。",
+    "limitations": "没有协议模拟器；只验证属性映射；承载关系的确认与拓扑在 P3 接入。",
+    "evidence": "伪造 pyVmomi 对象映射单元测试。未做真实协议或实机验证。"
+  },
+  {
+    "name": "linux-b", "label": "Alpine / Rocky / AlmaLinux", "batch": "B", "interval": 60,
+    "steps": [{"protocol": "snmp"}, {"protocol": "ssh", "mode": "fallback"}],
+    "platforms": ["Alpine", "Rocky", "AlmaLinux"], "metrics": ["CPU", "内存", "磁盘", "负载", "接口流量与错误", "运行时间"],
+    "prerequisites": "只读 SNMP 或 SSH；/proc、/sys 和 df 可读；兼容 BusyBox 与常见 GNU 工具输出。",
+    "limitations": "AlmaLinux 暂无单独回放样本；特定系统的命令与传感器覆盖仍需实机确认。",
+    "evidence": "SSH 固定命令解析测试与本机协议服务器。未实机验证。"
+  },
+  {
+    "name": "reachability", "label": "仅 TCP 可达性", "batch": "B", "interval": 60,
+    "steps": [{"protocol": "reach"}],
+    "platforms": ["随身 WiFi", "未开放监控协议的家用设备"], "metrics": ["管理端口可达性", "连接耗时"],
+    "prerequisites": "至少一个有明确 TCP 端口的管理端点；不需要凭据。",
+    "limitations": "端口不响应不等于设备离线；不代表 CPU、内存、无线或蜂窝等完整监控支持。",
+    "evidence": "TCP 连接成功、拒绝和超时的离线测试。未实机验证。"
+  },
+  {
+    "name": "ups-snmp", "label": "UPS（UPS-MIB）", "batch": "C", "interval": 60,
+    "steps": [{"protocol": "snmp"}],
+    "platforms": ["实现 UPS-MIB（RFC 1628）的 UPS 网卡"], "metrics": ["电池状态", "市电 / 电池供电", "剩余电量", "剩余时间", "输出负载", "输入电压"],
+    "prerequisites": "UPS 网卡开启 SNMP（推荐 v3 只读）。",
+    "limitations": "只读；不做断电联动关机（写操作需单独设计）；厂商私有 MIB 的额外字段不读取。",
+    "evidence": "按 RFC 1628 编写的伪造 SNMP 响应测试。未实机验证。"
+  },
+  {
+    "name": "routeros", "label": "MikroTik RouterOS", "batch": "C", "interval": 60,
+    "steps": [{"protocol": "snmp"}],
+    "platforms": ["MikroTik RouterOS"], "metrics": ["接口流量与错误", "CPU", "内存", "主板 / CPU 温度", "输入电压", "DHCP 租约数", "LLDP 邻居", "MAC / ARP 表"],
+    "prerequisites": "RouterOS 开启 SNMP（/snmp，推荐 v3 只读）。",
+    "limitations": "温度、电压只有带传感器的型号才有；不读取无线客户端与 CAPsMAN；不改任何配置。",
+    "evidence": "按 MIKROTIK-MIB 公开定义编写的伪造 SNMP 响应测试。未实机验证。"
+  },
+  {
+    "name": "nas-synology", "label": "群晖 NAS", "batch": "C", "interval": 60,
+    "steps": [{"protocol": "snmp"}],
+    "platforms": ["Synology DSM"], "metrics": ["整机状态", "系统温度", "电源状态", "硬盘健康与温度", "存储池 / RAID 状态", "CPU", "内存", "接口流量"],
+    "prerequisites": "DSM 控制面板 → 终端机和 SNMP 中开启 SNMP（推荐 v3 只读）。",
+    "limitations": "只读；不读取共享文件夹与套件状态；其他品牌 NAS 按通用 Linux SNMP 采集。",
+    "evidence": "按 SYNOLOGY-SYSTEM / DISK / RAID-MIB 公开定义编写的伪造 SNMP 响应测试。未实机验证。"
+  }
+]
