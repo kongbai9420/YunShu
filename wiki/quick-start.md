@@ -12,7 +12,7 @@
 
 需要 PostgreSQL 的标准版、企业版见 [部署与运行](deployment.md)。
 
-所有文件都在 [Releases](https://github.com/kongbai9420/YunShu/releases) 页面下载，镜像是 `ghcr.io/kongbai9420/yunshu:4.4.0-beta.1`（amd64 / arm64）。下载后可以按 [校验下载](verify.md) 核对签名与校验值。
+所有文件都在 [Releases](https://github.com/kongbai9420/YunShu/releases) 页面下载，镜像是 `ghcr.io/kongbai9420/yunshu:4.4.0-beta.2`（amd64 / arm64）。下载后可以按 [校验下载](verify.md) 核对签名与校验值。
 
 ## 方式一：一条 docker run 命令
 
@@ -23,7 +23,7 @@ docker run -d --name yunshu --restart unless-stopped \
   -v yunshu-keys:/etc/yunshu \
   -e YUNSHU_EMBEDDED_WORKER=1 \
   -e YUNSHU_SETUP_WIZARD=0 \
-  ghcr.io/kongbai9420/yunshu:4.4.0-beta.1
+  ghcr.io/kongbai9420/yunshu:4.4.0-beta.2
 ```
 
 - `yunshu-data`：数据库与平台备份。
@@ -37,7 +37,7 @@ docker run -d --name yunshu --restart unless-stopped \
 ```yaml
 services:
   yunshu:
-    image: ghcr.io/kongbai9420/yunshu:4.4.0-beta.1
+    image: ghcr.io/kongbai9420/yunshu:4.4.0-beta.2
     container_name: yunshu
     command: ["api"]
     ports:
@@ -65,12 +65,12 @@ NAS 图形界面的逐步说明、把数据放进共享文件夹，见仓库里�
 
 包里自带 Python 运行时，由 systemd 管理。支持 Debian 12 / 13、Ubuntu 22.04 / 24.04、Rocky / AlmaLinux 8 / 9、openEuler 20.03 / 22.03 / 24.03，amd64 与 arm64。麒麟 V10 在支持范围内但尚未实测，见 [常见问题](troubleshooting.md)。
 
-下载 `yunshu-4.4.0-beta.1-linux-<amd64|arm64>.tar.gz` 和同名 `.sha256`：
+下载 `yunshu-4.4.0-beta.2-linux-<amd64|arm64>.tar.gz` 和同名 `.sha256`：
 
 ```bash
-sha256sum -c yunshu-4.4.0-beta.1-linux-amd64.tar.gz.sha256
-tar xzf yunshu-4.4.0-beta.1-linux-amd64.tar.gz
-cd yunshu-4.4.0-beta.1
+sha256sum -c yunshu-4.4.0-beta.2-linux-amd64.tar.gz.sha256
+tar xzf yunshu-4.4.0-beta.2-linux-amd64.tar.gz
+cd yunshu-4.4.0-beta.2
 sudo ./install.sh --start
 ```
 
@@ -82,11 +82,11 @@ sudo ./install.sh --start
 
 适合 Windows Server 2019 / 2022 / 2025 或 Windows 10 / 11（64 位）。作为系统服务开机自启，局域网里其他电脑可以访问。
 
-1. 下载 `Yunshu-4.4.0-beta.1-windows-amd64.msi` 和同名 `.sha256`，核对校验值：
+1. 下载 `Yunshu-4.4.0-beta.2-windows-amd64.msi` 和同名 `.sha256`，核对校验值：
 
    ```powershell
-   (Get-FileHash -Algorithm SHA256 .\Yunshu-4.4.0-beta.1-windows-amd64.msi).Hash.ToLower()
-   Get-Content .\Yunshu-4.4.0-beta.1-windows-amd64.msi.sha256
+   (Get-FileHash -Algorithm SHA256 .\Yunshu-4.4.0-beta.2-windows-amd64.msi).Hash.ToLower()
+   Get-Content .\Yunshu-4.4.0-beta.2-windows-amd64.msi.sha256
    ```
 
 2. 双击安装。安装包**没有代码签名**，SmartScreen 可能提示“未知发布者”；确认校验值一致后点“更多信息 → 仍要运行”。

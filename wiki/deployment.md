@@ -27,7 +27,7 @@ Linux 安装包和 Windows 服务版默认是轻量版，也可以在 `yunshu.en
 
 ## Docker 与 NAS
 
-镜像 `ghcr.io/kongbai9420/yunshu:4.4.0-beta.1` 同时支持 amd64 和 arm64，群晖、飞牛 fnOS、威联通、Unraid、普通 Linux 服务器都能运行。轻量版的命令和 YAML 见 [快速开始](quick-start.md)。
+镜像 `ghcr.io/kongbai9420/yunshu:4.4.0-beta.2` 同时支持 amd64 和 arm64，群晖、飞牛 fnOS、威联通、Unraid、普通 Linux 服务器都能运行。轻量版的命令和 YAML 见 [快速开始](quick-start.md)。
 
 **数据卷**
 

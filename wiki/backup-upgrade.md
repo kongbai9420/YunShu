@@ -76,7 +76,7 @@ yunshu keytool export <目标文件>        # 导出（目标文件不能已存�
 
 两处变化：
 
-- **镜像名变了**：新镜像是 `ghcr.io/kongbai9420/yunshu`（原来是 `ghcr.io/kongbai9420/yunshu-ops`），`image:` 写 `ghcr.io/kongbai9420/yunshu:4.4.0-beta.1`。
+- **镜像名变了**：新镜像是 `ghcr.io/kongbai9420/yunshu`（原来是 `ghcr.io/kongbai9420/yunshu-ops`），`image:` 写 `ghcr.io/kongbai9420/yunshu:4.4.0-beta.2`。
 - **卷名变了**：如果你用过 4.0 的 `docker/docker-compose.ops.yml` 示例，它没有固定卷名，Docker 按“目录名_卷名”命名（例如 `docker_yunshu-data`、`docker_yunshu-keys`）。现在的模板卷名固定为 `yunshu-data`、`yunshu-keys`。**直接换新模板会挂上两个空卷，看起来像数据没了**（旧数据还在旧卷里）。
 
 步骤概要：

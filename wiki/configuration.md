@@ -123,7 +123,7 @@ TZ=Asia/Shanghai
 
 | 变量 | 用途 |
 | --- | --- |
-| `YUNSHU_IMAGE` | `deploy/` 下 compose 模板使用的镜像，默认 `ghcr.io/kongbai9420/yunshu:4.4.0-beta.1` |
+| `YUNSHU_IMAGE` | `deploy/` 下 compose 模板使用的镜像，默认 `ghcr.io/kongbai9420/yunshu:4.4.0-beta.2` |
 | `POSTGRES_PASSWORD` | 标准版模板里 PostgreSQL 的密码（写在 `.env`，不要提交到任何仓库） |
 | `YUNSHU_API_URL` | 前端开发服务器转发到的后端地址，默认 `http://127.0.0.1:8000` |
 | `YUNSHU_PREVIEW_PASSWORD` | 本地预览造数据脚本使用的登录密码 |

@@ -1,6 +1,6 @@
 <img src="assets/logo.png" alt="云枢" width="96">
 
-# 云枢运维平台 <small>4.4.0-beta.1</small>
+# 云枢运维平台 <small>4.4.0-beta.2</small>
 
 > 面向家庭实验室、小机房与中小企业的无 Agent 基础设施运维平台
 
