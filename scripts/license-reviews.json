@@ -28,6 +28,13 @@
       "license": "MIT",
       "evidence": "本项目自身（镜像根组件，版本为构建时的本地镜像标签）；仓库根目录 LICENSE 与 backend/pyproject.toml 均为 MIT。只对本项目自身允许通配版本",
       "reviewed_at": "2026-10-18"
+    },
+    {
+      "name": "ghcr.io/kongbai9420/yunshu",
+      "version": "*",
+      "license": "MIT",
+      "evidence": "本项目自身（发布流水线生成 SBOM 时以镜像仓库名称作为根组件，版本为发布版本号）；仓库根目录 LICENSE 与 backend/pyproject.toml 均为 MIT",
+      "reviewed_at": "2026-10-29"
     }
   ]
 }

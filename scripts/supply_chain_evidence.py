@@ -50,6 +50,10 @@ def digest(path: Path) -> str:
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
+# 本项目自身的组件名：本地构建的镜像标签，以及发布到镜像仓库的名称（发布时的 SBOM 根组件）
+OWN_NAMES = {"yunshu-ops", "ghcr.io/kongbai9420/yunshu"}
+
+
 def load_reviews(path: Path = REVIEWS) -> list[dict]:
     if not path.exists():
         return []
@@ -57,7 +61,7 @@ def load_reviews(path: Path = REVIEWS) -> list[dict]:
     for review in reviews:
         if not all(review.get(key) for key in ("name", "version", "license", "evidence", "reviewed_at")):
             raise ValueError(f"许可证人工核对记录不完整：{review}")
-        if review["version"] == "*" and review["name"] != "yunshu-ops":
+        if review["version"] == "*" and review["name"] not in OWN_NAMES:
             raise ValueError("只有本项目自身可以使用通配版本，其他组件必须按精确版本核对")
     return reviews
 

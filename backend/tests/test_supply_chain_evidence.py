@@ -63,7 +63,7 @@ def test_manual_license_review_requires_exact_version_and_never_overrides_tool()
 
 
 def test_license_review_file_is_complete_and_wildcard_only_for_own_project(tmp_path):
-    assert {r["name"] for r in evidence.load_reviews()} >= {"pysnmp", "python", "yunshu-ops"}
+    assert {r["name"] for r in evidence.load_reviews()} >= {"pysnmp", "python", "yunshu-ops", "ghcr.io/kongbai9420/yunshu"}
     bad = tmp_path / "reviews.json"
     bad.write_text('{"reviews": [{"name": "other", "version": "*", "license": "MIT", "evidence": "x", "reviewed_at": "2026-10-18"}]}', encoding="utf-8")
     with pytest.raises(ValueError):
