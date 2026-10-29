@@ -118,3 +118,28 @@ class ThermalPolicy(UUIDPrimaryKey, Base):
     last_request_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     updated_by: Mapped[str] = mapped_column(String(100), default="")
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class ThermalCommandProfile(UUIDPrimaryKey, Base):
+    """管理员自定义的风扇命令（IPMI raw）。按设备读出的厂商 / 型号 / BMC 固件匹配，优先于内置命令。
+
+    restore_commands / set_commands 每行一条，写法同 ipmitool raw：netfn command data...，
+    {pwm} 处填入目标转速。只允许 OEM 段的 netfn，不能借此发送电源、用户管理等命令。
+    """
+
+    __tablename__ = "thermal_command_profiles"
+
+    name: Mapped[str] = mapped_column(String(100))
+    vendor: Mapped[str] = mapped_column(String(64))
+    model_pattern: Mapped[str] = mapped_column(String(200), default="")
+    firmware_min: Mapped[str] = mapped_column(String(32), default="")
+    firmware_max: Mapped[str] = mapped_column(String(32), default="")
+    restore_commands: Mapped[str] = mapped_column(Text)
+    set_commands: Mapped[str] = mapped_column(Text)
+    pwm_scale: Mapped[str] = mapped_column(String(16), default="percent")
+    safe_min_pwm: Mapped[int] = mapped_column(Integer, default=20)
+    safe_max_pwm: Mapped[int] = mapped_column(Integer, default=100)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    note: Mapped[str] = mapped_column(Text, default="")
+    updated_by: Mapped[str] = mapped_column(String(100), default="")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)

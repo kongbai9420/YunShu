@@ -26,9 +26,10 @@ import {
 import { dateText, usePoll } from "@/lib/monitor"
 import { cn } from "@/lib/utils"
 import { CutoverPanel } from "./CutoverPanel"
+import { ThermalCommands } from "./ThermalCommands"
 import { ThermalPolicies } from "./ThermalPolicies"
 
-type Tab = "power" | "thermal" | "bmc-snmp" | "policies" | "history" | "owner"
+type Tab = "power" | "thermal" | "bmc-snmp" | "policies" | "commands" | "history" | "owner"
 // guest-power：虚拟机 / 容器经虚拟化平台控制电源（4.2 P17）；bmc-snmp：经 Redfish 开启 BMC 的 SNMP（4.4 P19）
 type Kind = "power" | "thermal" | "guest-power" | "bmc-snmp"
 
@@ -70,6 +71,7 @@ export function OperationsPage() {
             { value: "thermal", label: "风扇与温控" },
             { value: "bmc-snmp", label: "开启 SNMP" },
             { value: "policies", label: "温控策略" },
+            { value: "commands", label: "风扇命令" },
             { value: "history", label: "操作记录" },
             { value: "owner", label: "控制归属" },
           ]}
@@ -83,6 +85,8 @@ export function OperationsPage() {
           />
         ) : tab === "policies" ? (
           <ThermalPolicies editable={editable} curveEditable={editable && seesAll(user)} legacy={status.data?.owner !== "new"} />
+        ) : tab === "commands" ? (
+          <ThermalCommands />
         ) : tab === "owner" ? (
           <CutoverPanel isAdmin={user?.role === "admin"} changed={status.refresh} />
         ) : (
@@ -252,10 +256,8 @@ function ControlPanel({ kind, status, editable }: { kind: Kind; status: ControlS
           ) : null}
           {kind === "thermal" ? (
             <p className="mt-1 text-xs text-muted-foreground">
-              风扇控制还要求设备的厂商、型号与 BMC 固件（执行时只读读取）和能力目录中经实机验证的画像一致；资产上填写的品牌型号不作为依据。
-              {status && status.thermal_catalog_size === 0
-                ? "当前能力目录为空：还没有任何经实机验证的机型，所有风扇控制都会被拒绝。"
-                : ""}
+              执行时先读取设备的厂商、型号与 BMC 固件，再到“风扇命令”里匹配要用的命令；资产上填写的品牌型号不作为依据，匹配不到的设备会被拒绝。
+              内置命令大多整理自厂商文档与社区资料，未经本项目实机验证，请先在非生产设备上试用。
               转速低于机型安全下限时直接拒绝，不会自动改成下限。
             </p>
           ) : null}
@@ -458,8 +460,8 @@ export function ConfirmDialog({
             <>
               {kind === "thermal"
                 ? action.high_risk
-                  ? "固定转速会让 BMC 停止按温度自动调速，转速过低可能导致过热。执行前会读取设备型号核对能力目录；超时标为“结果不确定”，不会自动重试。"
-                  : "恢复由 BMC 按温度自动调节风扇。该机型无法回读控制模式，结果会显示为“已接受，无法确认”。"
+                  ? "固定转速会让 BMC 停止按温度自动调速，转速过低可能导致过热。执行前会读取设备型号匹配风扇命令；超时标为“结果不确定”，不会自动重试。"
+                  : "恢复由 BMC 按温度自动调节风扇。通过 IPMI 下发的无法回读控制模式，结果会显示为“已接受，无法确认”；通过 Redfish 的会再读一次确认。"
                 : kind === "bmc-snmp"
                   ? action.high_risk
                     ? "关闭后，依赖这台 BMC 的 SNMP 的其他监控系统也会读不到数据。修改发出后超时会标为“结果不确定”，不会自动重试。"

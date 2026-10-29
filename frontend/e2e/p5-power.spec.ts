@@ -143,6 +143,41 @@ test("温控策略：编辑曲线带修订号，为服务器添加并启用策�
   await expect(page.getByRole("listitem", { name: "温控样本甲 的温控策略" })).toContainText("没有可用的 CPU 温度", { timeout: 30000 })
 })
 
+test("风扇命令：管理员添加自定义命令后，原先匹配不到的设备可以下发", async ({ page }) => {
+  await login(page)
+  await page.goto("/#/operations")
+  await page.getByRole("button", { name: "风扇命令", exact: true }).click()
+  await expect(page.getByRole("listitem", { name: /^内置风扇命令/ }).first()).toBeVisible()
+  await page.getByRole("button", { name: "新增自定义命令" }).click()
+  const form = page.getByRole("group", { name: "新增自定义风扇命令" })
+  await form.getByLabel("名称").fill("其他厂商（自测）")
+  await form.getByLabel("厂商").fill("Other Vendor")
+  await form.getByLabel("恢复原厂温控的命令").fill("0x00 0x02 0x00")
+  await form.getByLabel("设定转速的命令").fill("0x3a 0x07 0xff {pwm} 0x01")
+  await form.getByRole("button", { name: "保存" }).click()
+  await expect(form.getByRole("alert")).toContainText("OEM 段")
+  await form.getByLabel("恢复原厂温控的命令").fill("0x3a 0x07 0xff 0x00 0x00")
+  await form.getByRole("button", { name: "保存" }).click()
+  const item = page.getByRole("listitem", { name: "自定义风扇命令 其他厂商（自测）" })
+  await expect(item).toContainText("0x3a 0x07 0xff {pwm} 0x01")
+
+  // 192.0.2.252 报告的厂商是 Other Vendor：之前被拒绝，现在用自定义命令下发
+  await page.getByRole("button", { name: "风扇与温控", exact: true }).click()
+  await page.getByLabel("搜索资产").fill("温控样本乙")
+  await page.getByRole("button", { name: "搜索", exact: true }).click()
+  await page.getByLabel("温控样本乙", { exact: true }).check()
+  await page.getByRole("button", { name: "恢复原厂自动温控", exact: true }).click()
+  await page.getByRole("dialog").getByRole("button", { name: "确认恢复原厂自动温控" }).click()
+  const result = page.locator("section").filter({ hasText: "本次操作结果" })
+  await expect(result.getByText("已接受，无法确认")).toBeVisible()
+  await expect(result).toContainText("管理员自定义")
+
+  await page.getByRole("button", { name: "风扇命令", exact: true }).click()
+  page.once("dialog", (d) => void d.accept())
+  await page.getByRole("listitem", { name: "自定义风扇命令 其他厂商（自测）" }).getByRole("button", { name: "删除" }).click()
+  await expect(page.getByText("还没有自定义命令。")).toBeVisible()
+})
+
 // 必须在“控制归属”用例之前：那个用例会切回旧控制器，之后所有控制都会被拒绝
 test("资源全景电源快捷入口复用 P5 门禁：核对对象、承载影响、确认后才提交", async ({ page }) => {
   const submits: string[] = []

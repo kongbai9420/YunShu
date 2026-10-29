@@ -43,7 +43,7 @@ from app.models.entities import (
 )
 from app.models.topology import MacObservation, NetworkLink, TopologyView
 from app.models.virtualization import VirtualizationObservation, VirtualizationSource
-from app.models.control import ControlOperation, ControlSetting, ControlTarget, ThermalCurve, ThermalPolicy
+from app.models.control import ControlOperation, ControlSetting, ControlTarget, ThermalCommandProfile, ThermalCurve, ThermalPolicy
 from app.models.ai import AiNote, AiProvider, AiSetting, AiUsage
 from app.models.software import AssetPackage, PackageScan
 from app.models.vulnmatch import VulnMatch
@@ -56,7 +56,7 @@ __all__ = [
     "VirtualizationObservation", "VirtualizationSource",
     "Alert", "AlertEvent", "AlertRule", "MaintenanceWindow", "NotificationChannel", "NotificationDelivery", "NotificationIntent",
     "Asset",
-    "ControlOperation", "ControlSetting", "ControlTarget", "ThermalCurve", "ThermalPolicy",
+    "ControlOperation", "ControlSetting", "ControlTarget", "ThermalCommandProfile", "ThermalCurve", "ThermalPolicy",
     "AssetRelation",
     "AuditEvent", "PlatformSetting", "UiTheme", "UiWallpaper",
     "CollectionPlan",

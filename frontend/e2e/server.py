@@ -92,7 +92,7 @@ class FakePower:
     def close(self): pass
 
 
-# 离线测试专用画像：只在这个测试后端里注入，生产能力目录为空
+# 离线测试专用的风扇命令：只在这个测试后端里注入，替换内置命令库
 FIXTURE_PROFILE = ThermalProfile(
     profile_id="e2e-fixture", vendor="fake vendor", model_patterns=(r"Fake Model.*",), firmware_min="1.0", firmware_max="9.9",
     driver_id="dell_idrac_raw_v1", operations=frozenset({ThermalOperation.RESTORE_AUTO, ThermalOperation.SET_SPEED_ALL}),
