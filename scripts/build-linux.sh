@@ -5,13 +5,13 @@
 #   scripts/build-linux.sh [--frontend-dist DIR]    已在 EL8（glibc 2.28）+ Python 3.11 环境里时直接构建（CI 用）
 #   选项：--output DIR（默认 artifacts/linux）
 #
-# glibc 基线 2.28：在 AlmaLinux 8 上用 AppStream 的 python3.11（带共享库 libpython3.11.so，PyInstaller 需要；
-# PyPA manylinux_2_28 镜像里的 CPython 是 --disable-shared 静态构建，PyInstaller 用不了）构建，
-# 以便同一个包能在麒麟 V10、openEuler 20.03、EL8 及更新的系统上运行。构建后检查所有 ELF 文件实际需要的
-# glibc / libstdc++ 符号版本，超过 YUNSHU_GLIBC_MAX（默认 2.28）/ YUNSHU_GLIBCXX_MAX（默认 3.4.25，GCC 8）就失败；
-# 实际需要的 glibc 版本写进包里的 GLIBC_REQUIRED，install.sh 安装前对照主机检查。
-# EL8 自带的 SQLite 是 3.26，而平台的任务认领用 UPDATE … RETURNING（3.35+），所以从 sqlite.org 的源码
-# （版本与 SHA-256 固定在下面）编译 libsqlite3.so.0，让 PyInstaller 打进包里替代系统库。
+# glibc 基线 2.28：在 AlmaLinux 8 上构建，以便同一个包能在麒麟 V10、openEuler 20.03、EL8 及更新的系统上运行。
+# Python 运行时用 python-build-standalone 的 CPython 3.11（版本与 SHA-256 固定在下面；带共享库 libpython3.11.so，
+# PyInstaller 需要；面向 glibc 2.17 构建）。EL8 AppStream 的 python3.11 由红帽向后移植补丁、版本号不变，
+# 供应链扫描只能按版本号判断，会一直报已修复的漏洞，所以不用它。SQLite、OpenSSL 等静态编译在 libpython 里，
+# 不依赖 EL8 自带的旧版 SQLite 3.26（任务认领用 UPDATE … RETURNING，需要 3.35+）。
+# 构建后检查所有 ELF 文件实际需要的 glibc / libstdc++ 符号版本，超过 YUNSHU_GLIBC_MAX（默认 2.28）/
+# YUNSHU_GLIBCXX_MAX（默认 3.4.25，GCC 8）就失败；实际需要的 glibc 版本写进包里的 GLIBC_REQUIRED，install.sh 安装前对照主机检查。
 # 依赖按哈希安装：运行时用 backend/requirements-standard.lock（含 PostgreSQL 驱动），
 # PyInstaller 用 backend/requirements-package.lock 里的同一版本与哈希（deploy/linux/lock_subset.py 筛选）。
 # 冒烟测试只用临时目录与应用自带的初始账号 admin / admin123（测试凭据），不读 /etc/yunshu。
@@ -22,10 +22,12 @@ set -euo pipefail
 BUILD_IMAGE="almalinux:8@sha256:2d0f2eb2a83cc09dbc2eb92fade4dbe8f709628149e81aa00aec70630406603b"
 GLIBC_MAX="${YUNSHU_GLIBC_MAX:-2.28}"
 GLIBCXX_MAX="${YUNSHU_GLIBCXX_MAX:-3.4.25}"
-SQLITE_VERSION=3.54.1
-SQLITE_URL="https://www.sqlite.org/2026/sqlite-autoconf-3540100.tar.gz"
-# sqlite.org 公布的是 SHA3-256（b6ced585…657d9c4），已核对一致；这里固定同一文件的 SHA-256
-SQLITE_SHA256=926ef8d3eab93fbf6e06011901273eec076b25594a4e1cdadd50c987f4f6d64e
+# python-build-standalone 20261026 的 CPython 3.11.18（install_only）；SHA-256 与该版本的 SHA256SUMS、GitHub 资产摘要一致
+PYTHON_VERSION=3.11.18
+PYTHON_RELEASE=20261026
+PYTHON_BASE="https://github.com/astral-sh/python-build-standalone/releases/download/$PYTHON_RELEASE"
+PYTHON_SHA256_amd64=a87ee63646c8f8438b7af3954b2135ed2af91d033c631f12a8f20af903046d06
+PYTHON_SHA256_arm64=a344c887b04a309f292cac1ef7c7a85e39e11932ec301d635258c569d830861b
 
 REPO="$(cd "$(dirname "$0")/.." && pwd -P)"
 OUT="$REPO/artifacts/linux"
@@ -60,16 +62,14 @@ case "${ID:-}:${VERSION_ID:-}" in
     almalinux:8*|rocky:8*|rhel:8*) ;;
     *) echo "注意：当前不是 EL8（$PRETTY_NAME），glibc 版本检查仍会把关" >&2 ;;
 esac
-# 构建工具：python3.11（AppStream）、gcc（编译 SQLite）、binutils（PyInstaller 用 objdump，基线检查用 readelf）
+# 构建工具：binutils（PyInstaller 用 objdump，基线检查用 readelf）、下载与解压 Python 运行时用的 curl / tar
 if [ "$(id -u)" -eq 0 ] && command -v dnf >/dev/null; then
     log "安装构建工具"
-    dnf install -y -q python3.11 python3.11-pip gcc binutils findutils tar gzip >/dev/null
+    dnf install -y -q binutils findutils tar gzip curl >/dev/null
 fi
-for tool in python3.11 gcc objdump readelf; do
+for tool in objdump readelf curl tar sha256sum; do
     command -v "$tool" >/dev/null || die "缺少 $tool"
 done
-PY="$(command -v python3.11)"
-"$PY" -c 'import sys; assert sys.version_info[:2] == (3, 11), sys.version' || die "需要 Python 3.11"
 
 case "$(uname -m)" in
     x86_64) ARCH=amd64 ;;
@@ -87,28 +87,20 @@ log "云枢 $VERSION linux-$ARCH，输出 $OUT"
 rm -rf "$BUILD"
 mkdir -p "$BUILD" "$OUT"
 
-# ---- SQLite（替代 EL8 的 3.26）-------------------------------------------------
-log "编译 SQLite $SQLITE_VERSION"
-SQLITE_DIR="$BUILD/sqlite"
-mkdir -p "$SQLITE_DIR"
-"$PY" - "$SQLITE_URL" "$SQLITE_SHA256" "$SQLITE_DIR/src.tar.gz" <<'PY'
-import hashlib, sys, urllib.request
-url, want, dst = sys.argv[1:]
-data = urllib.request.urlopen(url, timeout=120).read()
-got = hashlib.sha256(data).hexdigest()
-if got != want:
-    raise SystemExit(f"SQLite 源码校验失败：{got} != {want}")
-open(dst, "wb").write(data)
-PY
-tar xzf "$SQLITE_DIR/src.tar.gz" -C "$SQLITE_DIR"
-# 与发行版常见的编译选项一致；保留扩展加载等默认 API，保证 Python 的 _sqlite3 需要的符号都在
-gcc -O2 -fPIC -shared -Wl,-soname,libsqlite3.so.0 \
-    -DSQLITE_THREADSAFE=1 -DSQLITE_ENABLE_COLUMN_METADATA -DSQLITE_ENABLE_UNLOCK_NOTIFY \
-    -DSQLITE_ENABLE_FTS5 -DSQLITE_ENABLE_RTREE -DSQLITE_ENABLE_MATH_FUNCTIONS -DSQLITE_ENABLE_DBSTAT_VTAB \
-    -DSQLITE_SECURE_DELETE \
-    "$SQLITE_DIR/$(basename "$SQLITE_URL" .tar.gz)/sqlite3.c" -o "$SQLITE_DIR/libsqlite3.so.0" -lpthread -ldl -lm
-export LD_LIBRARY_PATH="$SQLITE_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-"$PY" - <<'PY' || die "编译出的 SQLite 不可用"
+# ---- Python 运行时 -------------------------------------------------------------
+case "$ARCH" in
+    amd64) PYTHON_TRIPLE=x86_64-unknown-linux-gnu; PYTHON_SHA256="$PYTHON_SHA256_amd64" ;;
+    arm64) PYTHON_TRIPLE=aarch64-unknown-linux-gnu; PYTHON_SHA256="$PYTHON_SHA256_arm64" ;;
+esac
+log "下载 CPython $PYTHON_VERSION（python-build-standalone $PYTHON_RELEASE）"
+PYTHON_TGZ="$BUILD/cpython.tar.gz"
+curl -fsSL --retry 3 -o "$PYTHON_TGZ" "$PYTHON_BASE/cpython-$PYTHON_VERSION%2B$PYTHON_RELEASE-$PYTHON_TRIPLE-install_only.tar.gz"
+echo "$PYTHON_SHA256  $PYTHON_TGZ" | sha256sum -c --quiet - || die "Python 运行时校验失败"
+tar xzf "$PYTHON_TGZ" -C "$BUILD"
+PY="$BUILD/python/bin/python3.11"
+"$PY" -c "import sys; assert sys.version.split()[0] == '$PYTHON_VERSION', sys.version" || die "Python 版本不是 $PYTHON_VERSION"
+[ -f "$BUILD/python/lib/libpython3.11.so.1.0" ] || die "Python 运行时里没有共享库 libpython3.11.so（PyInstaller 需要）"
+"$PY" - <<'PY' || die "Python 自带的 SQLite 不可用"
 import sqlite3
 v = tuple(int(x) for x in sqlite3.sqlite_version.split("."))
 assert v >= (3, 35), sqlite3.sqlite_version
@@ -152,7 +144,7 @@ BIN="$APP/yunshu"
 [ -x "$BIN" ] || die "没有生成 $BIN"
 
 # ---- glibc / libstdc++ 基线 ---------------------------------------------------
-# 逐个 ELF 文件读取动态符号版本：主程序、libpython、扩展模块、随包的 C 库（libssl、libffi、libsqlite3、
+# 逐个 ELF 文件读取动态符号版本：主程序、libpython、扩展模块、随包的 C 库（
 # 轮子自带的 *.libs/）都在内。随包带了 libstdc++ 时它本身定义的 GLIBCXX 版本不算需求，只看它依赖的 glibc。
 log "检查符号版本（glibc ≤ $GLIBC_MAX，libstdc++ ≤ $GLIBCXX_MAX）"
 find "$APP" -type f \( -name '*.so*' -o -perm -u+x \) -print0 \
@@ -181,13 +173,11 @@ if over "$NEED_CXX" "$GLIBCXX_MAX"; then
     grep '^GLIBCXX_' "$BUILD/symbol-needs.txt" | sort -uV | tail -n 20
     die "程序需要 libstdc++ GLIBCXX_$NEED_CXX，高于支持基线 $GLIBCXX_MAX"
 fi
-# 随包的关键 C 库：SQLite 必须是上面编译的那份；列出 OpenSSL / libstdc++ 供核对
-SQLITE_BUNDLED="$(find "$APP/_internal" -maxdepth 1 -name 'libsqlite3.so*' | head -n 1)"
-[ -n "$SQLITE_BUNDLED" ] || die "包里没有 libsqlite3"
-# 精简的 AlmaLinux 镜像没有 cmp（diffutils），用 sha256sum 比较
-[ "$(sha256sum <"$SQLITE_BUNDLED")" = "$(sha256sum <"$SQLITE_DIR/libsqlite3.so.0")" ] || die "包里的 libsqlite3 不是编译的 $SQLITE_VERSION（$SQLITE_BUNDLED）"
-find "$APP/_internal" -name 'libssl*.so*' -o -name 'libcrypto*.so*' -o -name 'libstdc++*.so*' | sed 's/^/  随包：/'
-unset LD_LIBRARY_PATH
+# 随包的关键 C 库：libpython 必须是上面固定的运行时（SQLite、OpenSSL 编译在里面）；列出其他随包的库供核对
+PYLIB_BUNDLED="$(find "$APP/_internal" -maxdepth 1 -name 'libpython3.11.so*' | head -n 1)"
+[ -n "$PYLIB_BUNDLED" ] || die "包里没有 libpython3.11"
+[ "$(sha256sum <"$PYLIB_BUNDLED")" = "$(sha256sum <"$BUILD/python/lib/libpython3.11.so.1.0")" ] || die "包里的 libpython 不是 CPython $PYTHON_VERSION（$PYLIB_BUNDLED）"
+find "$APP/_internal" -name 'libsqlite3*.so*' -o -name 'libssl*.so*' -o -name 'libcrypto*.so*' -o -name 'libstdc++*.so*' | sed 's/^/  随包：/'
 [ -f "$APP/_internal/tzdata/zoneinfo/Asia/Shanghai" ] || die "包里没有 tzdata 时区数据"
 [ -f "$APP/_internal/frontend/index.html" ] || die "包里没有前端页面"
 [ -f "$APP/_internal/alembic.ini" ] && [ -d "$APP/_internal/migrations" ] || die "包里没有迁移文件"
@@ -231,11 +221,11 @@ with urllib.request.urlopen(req, timeout=10) as r:
 assert body["user"]["require_password_change"] is True, body
 print("API 就绪，首次登录要求修改密码")
 PY
-# 运行中的进程实际加载的是包里的 SQLite / Python 库，而不是系统的（EL8 系统里就有 3.26 版的 libsqlite3）
-grep -E 'libsqlite3|libpython3' "/proc/$API_PID/maps" | awk '{print $6}' | sort -u >"$SMOKE/libs.txt"
+# 运行中的进程实际加载的是包里的 libpython（SQLite 在里面），而不是系统的库（EL8 系统里就有 3.26 版的 libsqlite3）
+grep -E 'libsqlite3|libpython3|libssl|libcrypto' "/proc/$API_PID/maps" | awk '{print $6}' | sort -u >"$SMOKE/libs.txt"
 cat "$SMOKE/libs.txt"
-grep -q "^$APP/_internal/libsqlite3" "$SMOKE/libs.txt" || die "API 没有加载包里的 libsqlite3"
-! grep -v "^$APP/" "$SMOKE/libs.txt" | grep -q . || die "API 加载了包外的 libsqlite3 / libpython"
+grep -q "^$APP/_internal/libpython3" "$SMOKE/libs.txt" || die "API 没有加载包里的 libpython"
+! grep -v "^$APP/" "$SMOKE/libs.txt" | grep -q . || die "API 加载了包外的 libsqlite3 / libpython / libssl"
 for i in $(seq 1 30); do
     if "$BIN" worker --check; then break; fi
     [ "$i" -lt 30 ] || { cat "$SMOKE/api.out" >&2; die "内嵌 Worker 没有心跳"; }
@@ -265,7 +255,7 @@ printf '%s\n' "$ARCH" >"$STAGE/ARCH"
 printf '%s\n' "$NEED" >"$STAGE/GLIBC_REQUIRED"
 
 # 第三方许可：Python 包（含 PyInstaller 引导程序）、随包的 EL8 系统库与 SQLite、前端依赖
-"$VPY" - "$STAGE" "$REPO" "$SQLITE_VERSION" <<'PY'
+"$VPY" - "$STAGE" "$REPO" "$PYTHON_VERSION" "$PYTHON_RELEASE" <<'PY'
 import importlib.metadata, json, shutil, subprocess, sys
 from pathlib import Path
 stage, repo = Path(sys.argv[1]), Path(sys.argv[2])
@@ -299,8 +289,10 @@ for dist in sorted(importlib.metadata.distributions(), key=lambda d: d.metadata[
                 dst = lic / "python" / name / item.name
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(src, dst)
-# 随包复制的系统库（libpython3.11、libssl、libffi 等，来自 EL8 的 RPM）：按 rpm 归属复制许可文本
-notes.append(f"SQLite {sys.argv[3]}: public domain, compiled from https://www.sqlite.org/ source")
+# Python 运行时静态包含 SQLite、OpenSSL、libffi、zlib、bzip2、xz 等；其余随包复制的系统库按 rpm 归属复制许可文本
+notes.append(f"CPython {sys.argv[3]} from python-build-standalone {sys.argv[4]} (https://github.com/astral-sh/python-build-standalone),"
+             " statically linking SQLite (public domain), OpenSSL (Apache-2.0), libffi, zlib, bzip2, xz and others;"
+             " their licenses: https://gregoryszorc.com/docs/python-build-standalone/main/running.html#licensing")
 pkgs = set()
 for so in (stage / "yunshu" / "_internal").glob("*.so*"):
     for base in ("/usr/lib64", "/lib64", "/usr/lib"):

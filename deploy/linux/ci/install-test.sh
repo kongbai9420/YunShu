@@ -172,16 +172,17 @@ yunshu_pids() {  # 程序位于 /opt/yunshu 下的进程号
 }
 
 assert_bundled_libs() {
-    # 主机自带的 SQLite（EL8 / openEuler 20.03 是 3.26，不支持 UPDATE … RETURNING）、libpython、OpenSSL 都不能被用上
+    # 主机自带的 SQLite（EL8 / openEuler 20.03 是 3.26，不支持 UPDATE … RETURNING）、libpython、OpenSSL 都不能被用上。
+    # 包里的 Python 运行时把 SQLite、OpenSSL 静态编译进了 libpython，所以只要求加载包里的 libpython，且不加载任何包外的这些库
     local pid found=0
-    step "运行中的进程只加载包里的 libsqlite3 / libpython / libssl"
+    step "运行中的进程只加载包里的 libpython，不加载主机的 libsqlite3 / libssl"
     for pid in $(yunshu_pids); do
         found=1
         # maps 同样受 ptrace 权限限制：以进程自己的用户 yunshu 去读
         runuser -u yunshu -- cat "/proc/$pid/maps" \
             | awk '$6 ~ /(libsqlite3|libpython3|libssl|libcrypto)/ {print $6}' | sort -u >/tmp/yunshu-libs.txt
         cat /tmp/yunshu-libs.txt
-        grep -q '^/opt/yunshu/.*/libsqlite3' /tmp/yunshu-libs.txt || fail "没有加载包里的 libsqlite3"
+        grep -q '^/opt/yunshu/.*/libpython3' /tmp/yunshu-libs.txt || fail "没有加载包里的 libpython"
         if grep -v '^/opt/yunshu/' /tmp/yunshu-libs.txt | grep -q .; then fail "加载了包外的库（见上）"; fi
     done
     [ "$found" -eq 1 ] || fail "没有找到云枢进程"
