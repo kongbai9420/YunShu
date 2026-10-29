@@ -227,7 +227,7 @@ ExecStartPost=/bin/sh -c 'i=0; while [ $$i -lt 90 ]; do curl -fsS -o /dev/null h
 
 ## 从源码构建压缩包
 
-需要 Docker（在固定摘要的 AlmaLinux 8 镜像里用 AppStream 的 Python 3.11 构建，依赖按哈希安装；PyPA 的 manylinux_2_28 镜像里的 Python 是静态构建，PyInstaller 用不了）：
+需要 Docker（在固定摘要的 AlmaLinux 8 镜像里构建；Python 运行时用 python-build-standalone 的 CPython 3.11（版本与 SHA-256 固定），依赖按哈希安装）：
 
 ```bash
 cd frontend && npm ci && npm run build && cd ..
