@@ -333,6 +333,21 @@ P6 持续运行与恢复演练：`python -m app.stability_bench --seconds 600 --
   iLO 修改后需重启管理芯片才生效，平台不自动重启，结果记“指令已接受”。关闭为高风险操作，需输入资产名称确认，保留已有 SNMP 端点。
 - 只用伪造 Redfish 测试（`tests/test_bmc_snmp.py`），未实机验证。
 
+## 风扇控制与温控策略
+
+- 命令库（`app/control/thermal.py`）：执行前先只读识别设备的厂商、型号、BMC 固件（IPMI 优先，其次 Redfish），
+  再按顺序匹配：管理员自定义命令（表 `thermal_command_profiles`，`/api/control/thermal/commands`，只允许 OEM 段 netfn）在前，
+  内置命令 `PRODUCTION_CATALOG` 在后。匹配不到时拒绝，没有任何写调用；资产上填写的品牌型号不参与匹配。
+- 内置命令：Dell iDRAC（IPMI，固件 ≤ 3.30.30.30；3.34 起用 Redfish 设 `ThermalSettings.1.MinimumFanSpeed`）、
+  超微 X10–X13 / H11–H13（IPMI）、华为 / 超聚变 iBMC（Redfish Thermal Oem）、HPE iLO 5 / 6（Redfish 散热档位）。
+  来源都是厂商文档与社区资料，标为 `community`（未经实机验证），结果消息里会注明。
+- 操作：`restore_auto`、`set_speed_all`、`set_speed_per_fan`（每个风扇各自的转速，或情景方案 `PRESETS` 的键）。
+  转速不在命令的安全区间内直接拒绝，不截断；按风扇设定时任一风扇越界整组拒绝。IPMI 无法回读，结果为“已接受，无法确认”；
+  Redfish 修改后再读一次，一致才算“已查询确认”。
+- 温控策略（`app/control/policy.py`，Worker 每 15 秒）：原厂自动 / 固定转速 / 按曲线 / 情景方案；
+  熔断（默认 82℃，回差 5℃）优先；温度过期或缺失时不降速；与已下发的转速（`control_targets.applied_pwm` /
+  `applied_speeds`）相同时不重复提交。策略发起的操作没有发起人，执行前跳过发起人范围复核，其他门禁照常。
+
 ## 采集（P2，只读）
 
 - 适配器接口：`probe`（测连接）、`discover`（发现接口 / 传感器）、`collect`（采集）、`capabilities`。
