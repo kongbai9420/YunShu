@@ -41,7 +41,7 @@ Threshold and reachability rules, upstream suppression, maintenance windows; e-m
 <td width="33%" valign="top">
 
 ### 🛡️ Guarded operations
-IPMI power, fan curves with an 82 °C safety fuse; gates, typed confirmations and audit — never retried automatically after a timeout.
+IPMI power; fan curves with an 82 °C safety fuse, with fan commands picked by the model and BMC firmware read from the device (built in for Dell, Supermicro, Huawei / xFusion and HPE; admins can add their own); gates, typed confirmations and audit — never retried automatically after a timeout.
 
 </td>
 </tr>
@@ -118,7 +118,7 @@ Off by default; data de-identified before sending; AI is read-only and cannot ac
 | **Monitoring** | Metric history with raw / minute / hour retention, live updates, dashboards, resource overview, worker status |
 | **Alerting** | Threshold and reachability rules, upstream suppression, maintenance windows, e-mail and chat-bot webhooks, daily inspection reports; a "server alarms" view of each BMC hardware event-log entry (Redfish, IPMI fallback; optional SNMP Trap and Redfish event push), with direct notification of critical events and handling notes |
 | **Inspection** | Built-in read-only templates for Linux, Proxmox VE, Huawei and H3C; admins can copy and customize them (dangerous commands are refused on save); jobs run once (now or at a set time) or daily / weekly / monthly; per-item verdicts with comparison to the previous output; alerts on critical findings; daily inspection reports |
-| **Operations** | IPMI power, fan curves with a safety fuse; VM power; host shutdown that stops its guests first; one-click SNMP enablement on server BMCs over Redfish (Dell iDRAC, HPE iLO and others; off by default) |
+| **Operations** | IPMI power; fan curves with a safety fuse (IPMI / Redfish fan commands matched by model and BMC firmware, custom commands supported); VM power; host shutdown that stops its guests first; one-click SNMP enablement on server BMCs over Redfish (Dell iDRAC, HPE iLO and others; off by default) |
 | **Topology & racks** | LLDP-discovered candidate links with manual confirmation and multiple layouts; rack elevations, device-type library, MAC / IP port lookup |
 | **Access control** | Admin / operator / viewer roles plus per-site and per-asset scopes; optional OIDC SSO; read-only API tokens and Prometheus `/metrics` |
 | **Vulnerability intel** | CVE.org records (updated about every 7 minutes), NVD, CISA KEV, OSV, EPSS, GitHub advisories, Chaitin / OSCS / Qianxin / ThreatBook, vendor RSS and watchvuln push, each enabled by you; online sync off by default with an offline bundle; local impact from version matching; fixed versions, source fix advice and workarounds, patch and vendor advisory links in one place; triage with review dates; instant alerts as soon as new data arrives (an early warning on a subscription hit, then a confirmation) plus a daily digest |
@@ -212,6 +212,7 @@ Backend: FastAPI + SQLAlchemy + Alembic. Frontend: React + TypeScript + Vite. Wo
 
 > [!WARNING]
 > The platform sends power and fan commands to servers. Control must be explicitly handed over by an administrator, high-risk actions require a typed confirmation, and timed-out operations are never retried automatically.
+> The built-in fan commands come from vendor documentation and community sources and **have not yet been verified on real hardware**; try them on a non-production server first and make sure restoring automatic fan control works.
 
 - Device credentials are encrypted with a master key that is stored separately from the data — **back up the master key on its own**.
 - Put the platform behind an HTTPS reverse proxy for remote access and set `YUNSHU_SECURE_COOKIES=1`.
