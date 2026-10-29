@@ -23,9 +23,8 @@ from sqlalchemy.orm import Session, selectinload
 
 from app import audit, metrics
 from app.control.service import (
-    PRODUCTION_CATALOG, Rejected, ThermalProfile, control_endpoint, new_platform_controls, request_thermal_system, thermal_gate,
+    PRODUCTION_CATALOG, Rejected, ThermalProfile, new_platform_controls, request_thermal_system, thermal_gate, thermal_target,
 )
-from app.control.base import target_key
 from app.metrics import Point
 from app.models import Asset, ControlOperation, ControlTarget, LegacyMapping, ThermalCurve, ThermalPolicy
 
@@ -204,9 +203,7 @@ def run_policies(db: Session, *, now: datetime | None = None, catalog: tuple[The
         if policy.mode == "curve" and len(nodes) < 2:
             _note(policy, now, "曲线不存在或节点不足，不调速")
             continue
-        ep = control_endpoint(asset)
-        key = target_key(ep.address) if ep else None
-        target = db.get(ControlTarget, key) if key else None
+        target = thermal_target(db, asset)
         temp, fresh = _cpu_temp(db, asset.id, now)
         d = decide(policy, nodes if policy.mode == "curve" else (curves.get("default") or []), temp, fresh, target)
         if d.fuse:
@@ -261,9 +258,7 @@ def governance_metrics(db: Session, *, now: datetime | None = None, catalog: tup
         asset = db.get(Asset, policy.asset_id, options=[selectinload(Asset.endpoints)])
         if asset is None or asset.lifecycle != "active":
             continue
-        ep = control_endpoint(asset)
-        key = target_key(ep.address) if ep else None
-        target = db.get(ControlTarget, key) if key else None
+        target = thermal_target(db, asset)
         maybe_manual = policy.legacy_mode in ("manual", "dynamic", "preset") or (target is not None and target.thermal_mode in ("manual", "unknown") and target.thermal_updated_at is not None)
         governed = True
         reason = ""
