@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import re
 import uuid
 from typing import Any
 
@@ -23,8 +24,10 @@ from app.control.service import (
 )
 from app.control.cutover import change_owner, describe as cutover_describe, probe_legacy
 from app.control.policy import DEFAULT_SAFETY_TEMP, FUSE_HYSTERESIS, CurveError, safety_temp, validate_nodes
-from app.control.thermal import PRODUCTION_CATALOG, ThermalProfile
-from app.models import Asset, ControlOperation, ControlTarget, ThermalCurve, ThermalPolicy, User
+from app.control.thermal import (
+    PRODUCTION_CATALOG, SOURCE_LABEL, TRANSPORT_LABEL, ThermalProfile, _version_tuple, custom_profile, parse_commands,
+)
+from app.models import Asset, ControlOperation, ControlTarget, ThermalCommandProfile, ThermalCurve, ThermalPolicy, User
 
 router = APIRouter(prefix="/api/control", tags=["control"])
 
@@ -179,7 +182,7 @@ def power(body: PowerRequest, actor: User = Depends(editor), db: Session = Depen
 
 
 def _catalog(request: Request) -> tuple[ThermalProfile, ...]:
-    # 生产固定为空目录；只有离线测试会通过 app.state 注入测试画像
+    # 内置命令库；离线测试可以通过 app.state 换成测试用的命令
     return getattr(request.app.state, "thermal_catalog", PRODUCTION_CATALOG)
 
 
@@ -330,6 +333,113 @@ def update_curve(body: CurveUpdate, actor: User = Depends(editor), db: Session =
     audit.record(db, actor, "thermal.curve.update", target_type="thermal_curve", target_id="default",
                  summary=f"温控曲线改为 {len(nodes)} 个节点，熔断温度 {safety_temp(nodes):g}℃", detail={"nodes": nodes})
     return _curve_out(c)
+
+
+# ---- 风扇命令库 ----
+
+
+def _builtin_out(p: ThermalProfile) -> dict[str, Any]:
+    return {
+        "id": p.profile_id, "label": p.label or p.profile_id, "vendor": p.vendor, "vendor_aliases": list(p.vendor_aliases),
+        "model_pattern": " | ".join(p.model_patterns), "firmware_min": p.firmware_min, "firmware_max": p.firmware_max,
+        "transport": TRANSPORT_LABEL.get(p.transport, p.transport), "source": p.evidence.source.value,
+        "source_label": SOURCE_LABEL.get(p.evidence.source, ""), "safe_min_pwm": p.safe_min_pwm, "safe_max_pwm": p.safe_max_pwm,
+        "restore_commands": "\n".join(s.text() for s in p.restore_steps), "set_commands": "\n".join(s.text() for s in p.set_steps),
+        "description": p.description,
+    }
+
+
+def _custom_out(r: ThermalCommandProfile) -> dict[str, Any]:
+    return {
+        "id": str(r.id), "name": r.name, "vendor": r.vendor, "model_pattern": r.model_pattern, "firmware_min": r.firmware_min,
+        "firmware_max": r.firmware_max, "restore_commands": r.restore_commands, "set_commands": r.set_commands,
+        "pwm_scale": r.pwm_scale, "safe_min_pwm": r.safe_min_pwm, "safe_max_pwm": r.safe_max_pwm, "enabled": r.enabled,
+        "note": r.note, "updated_by": r.updated_by, "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+    }
+
+
+@router.get("/thermal/commands")
+def thermal_commands(request: Request, user: User = Depends(reader), db: Session = Depends(get_db)) -> dict[str, Any]:
+    rows = db.scalars(select(ThermalCommandProfile).order_by(ThermalCommandProfile.name)).all()
+    return {"builtin": [_builtin_out(p) for p in _catalog(request)], "custom": [_custom_out(r) for r in rows],
+            "can_edit": user.role == "admin"}
+
+
+class CommandProfileBody(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    vendor: str = Field(min_length=1, max_length=64)
+    model_pattern: str = Field(default="", max_length=200)
+    firmware_min: str = Field(default="", max_length=32)
+    firmware_max: str = Field(default="", max_length=32)
+    restore_commands: str = Field(max_length=2000)
+    set_commands: str = Field(max_length=2000)
+    pwm_scale: str = Field(default="percent", pattern="^(percent|byte)$")
+    safe_min_pwm: int = Field(default=20, ge=0, le=100)
+    safe_max_pwm: int = Field(default=100, ge=0, le=100)
+    enabled: bool = True
+    note: str = Field(default="", max_length=1000)
+
+
+def _check_profile(body: CommandProfileBody) -> None:
+    try:
+        re.compile(body.model_pattern or ".*")
+    except re.error as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"型号匹配规则不是有效的正则表达式：{exc}") from exc
+    for label, v in (("最低固件版本", body.firmware_min), ("最高固件版本", body.firmware_max)):
+        if v.strip() and _version_tuple(v) is None:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"{label}“{v}”里没有数字")
+    if body.safe_min_pwm > body.safe_max_pwm:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "安全下限不能高于上限")
+    for label, text, needs in (("恢复原厂温控", body.restore_commands, False), ("设定转速", body.set_commands, True)):
+        try:
+            parse_commands(text, needs_pwm=needs)
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"{label}的命令：{exc}") from exc
+
+
+def _apply_profile(row: ThermalCommandProfile, body: CommandProfileBody, actor: User) -> None:
+    for k, v in body.model_dump().items():
+        setattr(row, k, v.strip() if isinstance(v, str) and k not in ("restore_commands", "set_commands", "note") else v)
+    row.vendor = row.vendor.lower()
+    row.updated_by = actor.display_name or actor.username
+    custom_profile(row)  # 已在 _check_profile 校验；这里再转一次保证能被匹配使用
+
+
+@router.post("/thermal/commands", status_code=status.HTTP_201_CREATED)
+def create_thermal_command(body: CommandProfileBody, actor: User = Depends(admin_only), db: Session = Depends(get_db)) -> dict[str, Any]:
+    _check_profile(body)
+    row = ThermalCommandProfile()
+    _apply_profile(row, body, actor)
+    db.add(row)
+    db.flush()
+    audit.record(db, actor, "thermal.command.create", target_type="thermal_command", target_id=str(row.id),
+                 summary=f"新增自定义风扇命令“{row.name}”（厂商 {row.vendor}）", detail=_custom_out(row))
+    return _custom_out(row)
+
+
+@router.put("/thermal/commands/{profile_id}")
+def update_thermal_command(profile_id: uuid.UUID, body: CommandProfileBody, actor: User = Depends(admin_only),
+                           db: Session = Depends(get_db)) -> dict[str, Any]:
+    row = db.get(ThermalCommandProfile, profile_id)
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "自定义风扇命令不存在")
+    _check_profile(body)
+    before = _custom_out(row)
+    _apply_profile(row, body, actor)
+    db.flush()
+    audit.record(db, actor, "thermal.command.update", target_type="thermal_command", target_id=str(row.id),
+                 summary=f"修改自定义风扇命令“{row.name}”", detail={"before": before, "after": _custom_out(row)})
+    return _custom_out(row)
+
+
+@router.delete("/thermal/commands/{profile_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_thermal_command(profile_id: uuid.UUID, actor: User = Depends(admin_only), db: Session = Depends(get_db)) -> None:
+    row = db.get(ThermalCommandProfile, profile_id)
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "自定义风扇命令不存在")
+    audit.record(db, actor, "thermal.command.delete", target_type="thermal_command", target_id=str(row.id),
+                 summary=f"删除自定义风扇命令“{row.name}”", detail=_custom_out(row))
+    db.delete(row)
 
 
 # ---- 控制切换 ----

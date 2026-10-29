@@ -132,11 +132,12 @@ def test_empty_catalog_is_ungoverned_and_alerts(app_factory, factory) -> None:  
         set_owner(db, "new")
         aid = _setup(db, app_factory.cipher)
         _temp(db, aid, 50.0)
-        assert run_policies(db, now=NOW)["ungoverned"] == 1
+        # 命令库为空（没有内置命令、也没有自定义命令）时，策略无法执行
+        assert run_policies(db, now=NOW, catalog=())["ungoverned"] == 1
         assert db.scalar(select(ControlOperation)) is None  # 不刷出被拒绝的操作
         p = db.scalar(select(ThermalPolicy))
-        assert "无法执行" in p.last_decision and "经过实机验证" in p.last_decision
-        governance_metrics(db, now=NOW)
+        assert "无法执行" in p.last_decision and "命令库是空的" in p.last_decision
+        governance_metrics(db, now=NOW, catalog=())
         db.commit()
         v = {x.key: x for x in metrics.latest(db, aid, now=NOW)}
         assert v[UNGOVERNED_METRIC].value == 1.0 and "无法接管" in v[UNGOVERNED_METRIC].message

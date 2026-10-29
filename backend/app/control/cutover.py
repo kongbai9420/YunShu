@@ -29,7 +29,7 @@ CHECKLIST: list[tuple[str, str]] = [
     ("legacy_auto", "旧版里每台服务器都已切回“自动”温控，或已登录 BMC 确认风扇为原厂自动模式"),
     ("legacy_stopped", "旧版服务已停止（进程或容器已退出、开机自启已关闭），不会再向 BMC 发送任何命令"),
     ("backup", "已备份新平台数据库（含单独导出的密钥文件）和旧版配置快照，回滚需要它们"),
-    ("catalog", "已知晓：能力目录中没有经实机验证的机型时，新平台不会下发任何风扇命令；可能停在手动转速的设备会触发“温控脱管”告警，需要人工处理"),
+    ("catalog", "已知晓：风扇命令按设备读出的厂商、型号与固件在命令库里匹配，内置命令大多未经实机验证；匹配不到的设备不会下发风扇命令，可能停在手动转速的会触发“温控脱管”告警，需要人工处理"),
 ]
 
 
@@ -72,8 +72,8 @@ def preflight(db: Session, settings: Settings, catalog: tuple[ThermalProfile, ..
     checks.append(Check("no_indeterminate", "没有结果不确定的设备", indeterminate == 0,
                         f"{indeterminate} 台待核对（切换后它们仍会暂停控制）" if indeterminate else "没有", blocking=False))
     manual = db.scalar(select(func.count()).select_from(ThermalPolicy).where(ThermalPolicy.legacy_mode.in_(("manual", "dynamic", "preset")))) or 0
-    checks.append(Check("catalog", "能力目录中有经实机验证的机型", bool(catalog),
-                        (f"有 {len(catalog)} 个" if catalog else "没有：切换后不会下发任何风扇命令")
+    checks.append(Check("catalog", "风扇命令库不为空", bool(catalog),
+                        (f"有 {len(catalog)} 条" if catalog else "空的：切换后不会下发任何风扇命令")
                         + (f"；旧版有 {manual} 台不是自动模式，切换后会触发“温控脱管”告警" if manual and not catalog else ""), blocking=False))
     return checks
 

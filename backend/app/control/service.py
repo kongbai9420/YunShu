@@ -36,12 +36,13 @@ from app.control.guest import (
 from app.control.guest import default_factory as default_guest_factory
 from app.control.power import ACTIONS, PowerClientFactory, PyghmiPowerClient, execute_power
 from app.control.thermal import (
-    OPERATION_LABEL, PRODUCTION_CATALOG, GateDenied, PyghmiThermalClient, ThermalClientFactory, ThermalOperation, ThermalProfile,
-    execute_thermal, validate_pwm,
+    OPERATION_LABEL, PRODUCTION_CATALOG, GateDenied, PyghmiThermalClient, RedfishClientFactory, ThermalClientFactory, ThermalOperation,
+    ThermalProfile, custom_profile, default_redfish_factory, execute_thermal, validate_pwm,
 )
 from app.crypto import CredentialCipher
 from app.models import (
-    Asset, AssetRelation, BmcEventSubscription, ControlOperation, ControlSetting, ControlTarget, Credential, ManagementEndpoint, Task, User,
+    Asset, AssetRelation, BmcEventSubscription, ControlOperation, ControlSetting, ControlTarget, Credential, ManagementEndpoint, Task,
+    ThermalCommandProfile, User,
     VirtualizationObservation, VirtualizationSource,
 )
 
@@ -97,13 +98,17 @@ class Gate:
     key: str
 
 
-def base_gate(db: Session, asset: Asset, *, operation_id: uuid.UUID | None = None) -> Gate:
-    """所有控制共用的检查；不满足时抛 Rejected，且没有任何设备调用。"""
+def _platform_checks(db: Session, asset: Asset) -> None:
     if not new_platform_controls(db):
         raise Rejected("legacy_owner", LEGACY_OWNER_MESSAGE)
     # 只允许“在用”：旧版里停用的设备导入后是“维护中”，旧版对它们零写，这里保持一致
     if asset.lifecycle != "active":
         raise Rejected("lifecycle", "资产不在“在用”状态（维护中、规划中、已退役都不允许控制）")
+
+
+def base_gate(db: Session, asset: Asset, *, operation_id: uuid.UUID | None = None) -> Gate:
+    """所有控制共用的检查；不满足时抛 Rejected，且没有任何设备调用。"""
+    _platform_checks(db, asset)
     ep = control_endpoint(asset)
     if ep is None:
         raise Rejected("no_endpoint", "资产没有可用于控制的 IPMI 端点（用途为“仅监控”的端点不能用于控制）")
@@ -324,15 +329,46 @@ def thermal_params(action: str, params: dict[str, Any]) -> tuple[ThermalOperatio
         raise Rejected(exc.code, str(exc)) from exc
 
 
+@dataclass
+class ThermalGate(Gate):
+    """风扇控制可用 IPMI 或 Redfish：endpoint 用来识别设备，alt 是另一种协议的端点（命令需要时使用）。"""
+
+    alt: ManagementEndpoint | None = None
+    catalog: tuple[ThermalProfile, ...] = ()
+    alt_ctx: EndpointContext | None = None
+
+
+def thermal_catalog(db: Session, builtin: tuple[ThermalProfile, ...]) -> tuple[ThermalProfile, ...]:
+    """命令库：启用的自定义命令在前（优先匹配），内置命令在后。"""
+    custom = []
+    for row in db.scalars(select(ThermalCommandProfile).where(ThermalCommandProfile.enabled.is_(True)).order_by(ThermalCommandProfile.name)):
+        try:
+            custom.append(custom_profile(row))
+        except ValueError:
+            continue
+    return (*custom, *builtin)
+
+
 def thermal_gate(
     db: Session, asset: Asset, action: str, params: dict[str, Any], *, catalog: tuple[ThermalProfile, ...],
     operation_id: uuid.UUID | None = None,
-) -> Gate:
+) -> ThermalGate:
     thermal_params(action, params)
-    g = base_gate(db, asset, operation_id=operation_id)
-    if not catalog:
-        raise Rejected("catalog_empty", "能力目录中还没有任何经过实机验证的机型，风扇控制默认拒绝")
-    return g
+    _platform_checks(db, asset)
+    eps = [e for e in (control_endpoint(asset), redfish_endpoint(asset)) if e is not None]
+    if not eps:
+        raise Rejected("no_endpoint", "资产没有可用于控制的 IPMI 或 Redfish 端点（用途为“仅监控”的端点不能用于控制）")
+    eps = [e for e in eps if e.credential_id is not None]
+    if not eps:
+        raise Rejected("unconfigured", "控制端点没有关联凭据")
+    key = target_key(eps[0].address)
+    if key is None:
+        raise Rejected("bad_address", "控制端点地址无效")
+    _check_target(db, key, operation_id)
+    full = thermal_catalog(db, catalog)
+    if not full:
+        raise Rejected("catalog_empty", "风扇命令库是空的，拒绝风扇控制")
+    return ThermalGate(eps[0], key, alt=eps[1] if len(eps) > 1 else None, catalog=full)
 
 
 def _actions_out(items: list[tuple[str, str, bool]], check: Callable[[str], Gate]) -> list[dict[str, Any]]:
@@ -373,9 +409,10 @@ THERMAL_ACTIONS = [(ThermalOperation.RESTORE_AUTO.value, OPERATION_LABEL[Thermal
 def describe_thermal(db: Session, asset: Asset, catalog: tuple[ThermalProfile, ...]) -> dict[str, Any]:
     probe = {ThermalOperation.SET_SPEED_ALL.value: {"pwm": 100}}
     return {
-        **_target_out(db, asset), "catalog_size": len(catalog),
+        **_target_out(db, asset), "catalog_size": len(thermal_catalog(db, catalog)),
         "actions": _actions_out(THERMAL_ACTIONS, lambda k: thermal_gate(db, asset, k, probe.get(k, {}), catalog=catalog)),
-        "note": "能否控制最终取决于执行时读取到的设备厂商、型号与固件是否与能力目录中经实机验证的画像一致；资产上填写的品牌型号不作为依据。",
+        "note": "执行时先读取设备的厂商、型号与 BMC 固件，再在风扇命令库里匹配要用的命令；资产上填写的品牌型号不作为依据。"
+                "内置命令大多整理自厂商文档与社区资料，未经本项目实机验证，请先在非生产设备上试用。",
     }
 
 
@@ -718,6 +755,8 @@ def _make_handler(cipher_factory: Callable[[], CredentialCipher], gate: GateChec
             op.status, op.started_at, op.message = "running", now_utc(), "正在执行"
             try:
                 ectx = _context(db, cipher_factory(), g.endpoint, g.endpoint.protocol)
+                if isinstance(g, ThermalGate) and g.alt is not None:
+                    g.alt_ctx = _context(db, cipher_factory(), g.alt, g.alt.protocol)
             except AdapterError as exc:
                 _release_target(db, op.target_key, op.id)
                 lock.release()
@@ -894,12 +933,17 @@ def make_power_handler(cipher_factory: Callable[[], CredentialCipher], client_fa
 def make_thermal_handler(
     cipher_factory: Callable[[], CredentialCipher], client_factory: ThermalClientFactory | None = None,
     catalog: tuple[ThermalProfile, ...] = PRODUCTION_CATALOG, drivers: dict[str, Any] | None = None,
+    redfish_factory: RedfishClientFactory | None = None,
 ):  # type: ignore[no-untyped-def]
     factory = client_factory or PyghmiThermalClient
 
-    def run(ectx: EndpointContext, op: ControlOperation, _g: Gate) -> RunResult:
+    def run(ectx: EndpointContext, op: ControlOperation, g: Gate) -> RunResult:
         top, pwm = thermal_params(op.action, op.params)
-        out = execute_thermal(ectx, top, pwm, catalog=catalog, factory=factory, drivers=drivers)
+        ctxs = {g.endpoint.protocol: ectx}
+        if isinstance(g, ThermalGate) and g.alt is not None and g.alt_ctx is not None:
+            ctxs[g.alt.protocol] = g.alt_ctx
+        out = execute_thermal(ctxs, top, pwm, catalog=g.catalog if isinstance(g, ThermalGate) else catalog, factory=factory,
+                              redfish_factory=redfish_factory or default_redfish_factory, drivers=drivers)
         return RunResult(out.status, out.message, out.observed, thermal_mode=out.mode, applied_pwm=out.pwm)
 
     gate: GateCheck = lambda db, a, op: thermal_gate(db, a, op.action, op.params, catalog=catalog, operation_id=op.id)  # noqa: E731
