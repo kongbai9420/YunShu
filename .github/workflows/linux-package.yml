@@ -117,7 +117,7 @@ jobs:
           mkdir -p "$out" /tmp/yunshu-sbom
           tarball="$(ls artifacts/linux/yunshu-*-linux-"$ARCH".tar.gz)"
           tar xzf "$tarball" -C /tmp/yunshu-sbom
-          "$SYFT" dir:/tmp/yunshu-sbom -o "syft-json=$out/sbom.syft.json" -o "spdx-json=$out/sbom.spdx.json"
+          "$SYFT" dir:/tmp/yunshu-sbom --source-name yunshu-ops -o "syft-json=$out/sbom.syft.json" -o "spdx-json=$out/sbom.spdx.json"
           "$GRYPE" "sbom:$out/sbom.syft.json" -o json --file "$out/scan.grype.json"
           "$GRYPE" "sbom:$out/sbom.syft.json" -o table | tail -n 40 || true
           "$SYFT" version > "$out/tools.txt"
