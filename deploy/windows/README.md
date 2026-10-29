@@ -18,8 +18,8 @@
 从发布页下载 `Yunshu-<版本>-windows-amd64.msi` 和同名的 `.sha256`，先核对校验值：
 
 ```powershell
-(Get-FileHash -Algorithm SHA256 .\Yunshu-4.4.0-beta.1-windows-amd64.msi).Hash.ToLower()
-Get-Content .\Yunshu-4.4.0-beta.1-windows-amd64.msi.sha256
+(Get-FileHash -Algorithm SHA256 .\Yunshu-4.4.0-beta.2-windows-amd64.msi).Hash.ToLower()
+Get-Content .\Yunshu-4.4.0-beta.2-windows-amd64.msi.sha256
 ```
 
 > [!NOTE]
@@ -30,9 +30,9 @@ Get-Content .\Yunshu-4.4.0-beta.1-windows-amd64.msi.sha256
 **静默安装**（管理员 PowerShell / 命令提示符）：
 
 ```powershell
-msiexec /i Yunshu-4.4.0-beta.1-windows-amd64.msi /qn /l*v install.log
+msiexec /i Yunshu-4.4.0-beta.2-windows-amd64.msi /qn /l*v install.log
 # 同时添加防火墙规则：
-msiexec /i Yunshu-4.4.0-beta.1-windows-amd64.msi /qn ADDLOCAL=ALL /l*v install.log
+msiexec /i Yunshu-4.4.0-beta.2-windows-amd64.msi /qn ADDLOCAL=ALL /l*v install.log
 ```
 
 安装程序做的事：
@@ -232,7 +232,7 @@ PostgreSQL 模式用升级前的 `pg_dump` 备份恢复（`yunshu backup restore
 “设置 → 应用 → 云枢运维平台 → 卸载”，或：
 
 ```powershell
-msiexec /x Yunshu-4.4.0-beta.1-windows-amd64.msi /qn
+msiexec /x Yunshu-4.4.0-beta.2-windows-amd64.msi /qn
 ```
 
 卸载会停止并删除服务、删除程序文件、PATH 项、开始菜单和防火墙规则，但**保留 `C:\ProgramData\Yunshu`**（配置、数据库、备份、主密钥、日志），以便以后重新安装继续使用。确定不再需要、并且已经备份过数据和主密钥时，再彻底删除：

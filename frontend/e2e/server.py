@@ -95,7 +95,8 @@ class FakePower:
 # 离线测试专用的风扇命令：只在这个测试后端里注入，替换内置命令库
 FIXTURE_PROFILE = ThermalProfile(
     profile_id="e2e-fixture", vendor="fake vendor", model_patterns=(r"Fake Model.*",), firmware_min="1.0", firmware_max="9.9",
-    driver_id="dell_idrac_raw_v1", operations=frozenset({ThermalOperation.RESTORE_AUTO, ThermalOperation.SET_SPEED_ALL}),
+    driver_id="dell_idrac_raw_v1",
+    operations=frozenset({ThermalOperation.RESTORE_AUTO, ThermalOperation.SET_SPEED_ALL, ThermalOperation.SET_SPEED_PER_FAN}),
     safe_min_pwm=30, safe_max_pwm=100, evidence=Evidence(EvidenceSource.STANDALONE_FIXTURE, note="浏览器测试"),
 )
 

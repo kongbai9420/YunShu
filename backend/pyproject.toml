@@ -1,6 +1,6 @@
 [project]
 name = "yunshu-ops-backend"
-version = "4.4.0-beta.1"
+version = "4.4.0-beta.2"
 description = "云枢运维平台 4.0 后端（FastAPI + SQLAlchemy + Alembic）"
 requires-python = ">=3.11,<3.12"
 license = { text = "MIT" }

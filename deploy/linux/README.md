@@ -28,9 +28,9 @@
 从发布页 <https://github.com/kongbai9420/YunShu/releases> 下载对应架构的 `yunshu-<版本>-linux-<架构>.tar.gz` 和同名 `.sha256`：
 
 ```bash
-sha256sum -c yunshu-4.4.0-beta.1-linux-amd64.tar.gz.sha256
-tar xzf yunshu-4.4.0-beta.1-linux-amd64.tar.gz
-cd yunshu-4.4.0-beta.1
+sha256sum -c yunshu-4.4.0-beta.2-linux-amd64.tar.gz.sha256
+tar xzf yunshu-4.4.0-beta.2-linux-amd64.tar.gz
+cd yunshu-4.4.0-beta.2
 sudo ./install.sh --start
 ```
 

@@ -2,6 +2,7 @@
 
 执行原则（旧版 _process_dynamic_curve）：
 - 只有控制归属为新平台、策略启用、资产在用时才会请求下发；所有下发都走控制门禁和控制任务。
+- 模式：原厂自动、固定转速、按曲线、情景方案（每个风扇各自的固定转速，与旧版的六个方案相同）。
 - 82℃ 熔断：最新有效 CPU 温度达到曲线最高节点温度（默认 82℃）时请求恢复原厂自动温控；
   降到熔断温度减 5℃ 以下才恢复按策略调速。
 - 温度过期、缺失或无效时绝不降低转速；不知道当前已下发转速（例如重启后）时不下发任何调速。
@@ -25,6 +26,7 @@ from app import audit, metrics
 from app.control.service import (
     PRODUCTION_CATALOG, Rejected, ThermalProfile, new_platform_controls, request_thermal_system, thermal_gate, thermal_target,
 )
+from app.control.thermal import LEGACY_PRESET_ALIASES, PRESETS
 from app.metrics import Point
 from app.models import Asset, ControlOperation, ControlTarget, LegacyMapping, ThermalCurve, ThermalPolicy
 
@@ -129,7 +131,12 @@ def migrate_legacy(db: Session) -> dict[str, int]:
             else:
                 p.pending_note = "旧版使用温控曲线，但曲线无法迁入，需人工确认"
         elif old == "preset":
-            p.pending_note = f"旧版情景方案“{rec.get('preset_key') or ''}”按风扇通道分别设定转速，无法安全转换为新策略，需人工确认"
+            key = str(rec.get("preset_key") or "").strip()
+            key = LEGACY_PRESET_ALIASES.get(key, key)
+            if key in PRESETS:
+                p.mode, p.preset_key, p.enabled = "preset", key, True
+            else:
+                p.pending_note = f"旧版情景方案“{rec.get('preset_key') or ''}”无法识别，未迁入，需人工确认"
         else:
             p.pending_note = f"旧版温控模式“{old}”无法识别，需人工确认"
         if p.pending_note:
@@ -146,10 +153,11 @@ def migrate_legacy(db: Session) -> dict[str, int]:
 
 @dataclass
 class Decision:
-    action: str | None  # restore_auto / set_speed_all / None
+    action: str | None  # restore_auto / set_speed_all / set_speed_per_fan / None
     pwm: int | None
     message: str
     fuse: str | None = None  # 新的熔断状态
+    preset: str = ""  # set_speed_per_fan 时的情景方案
 
 
 def decide(policy: ThermalPolicy, nodes: list[dict[str, Any]], temp: float | None, fresh: bool, target: ControlTarget | None) -> Decision:
@@ -168,6 +176,8 @@ def decide(policy: ThermalPolicy, nodes: list[dict[str, Any]], temp: float | Non
             return Decision(None, None, f"CPU {temp:g}℃ 已回落，解除熔断，下一轮恢复策略", fuse="normal")
     elif policy.fuse_state == "tripped":
         return Decision(None, None, "熔断中，温度读数过期或缺失，保持原厂自动温控")
+    if policy.mode == "preset":
+        return _decide_preset(policy, temp, fresh, target)
     want = policy.fixed_pwm if policy.mode == "fixed" else (interpolate(nodes, temp) if temp is not None else None)
     if want is None:
         return Decision(None, None, "没有可用的 CPU 温度，保持当前状态，不调速")
@@ -179,6 +189,25 @@ def decide(policy: ThermalPolicy, nodes: list[dict[str, Any]], temp: float | Non
     if mode == "manual" and applied is not None and abs(want - applied) < MIN_STEP:
         return Decision(None, None, f"当前 {applied}%，目标 {want}%，变化小于 {MIN_STEP}%，不调整")
     return Decision("set_speed_all", want, f"按{'固定转速' if policy.mode == 'fixed' else '曲线'}调到 {want}%" + (f"（CPU {temp:g}℃）" if temp is not None else ""))
+
+
+def _decide_preset(policy: ThermalPolicy, temp: float | None, fresh: bool, target: ControlTarget | None) -> Decision:
+    preset = PRESETS.get(policy.preset_key)
+    if preset is None:
+        return Decision(None, None, f"情景方案“{policy.preset_key}”不存在，不调速")
+    want = list(preset["speeds"])
+    applied = target.applied_speeds if target is not None and target.thermal_mode == "per_fan" else None
+    name = preset["name"]
+    if applied == want:
+        return Decision(None, None, f"已是情景方案“{name}”，不调整")
+    if not fresh:
+        # 与固定转速相同：温度不可信时不降速，不知道当前转速时不下发
+        if applied is None:
+            return Decision(None, None, "CPU 温度过期或缺失，且不知道当前已下发转速：不下发情景方案")
+        if any(w < a for w, a in zip(want, applied)):
+            return Decision(None, None, f"CPU 温度过期或缺失：情景方案“{name}”会降低部分风扇转速，暂不下发")
+    return Decision("set_speed_per_fan", None, f"按情景方案“{name}”设定每个风扇的转速" + (f"（CPU {temp:g}℃）" if temp is not None else ""),
+                    preset=policy.preset_key)
 
 
 def _cpu_temp(db: Session, asset_id: uuid.UUID, now: datetime) -> tuple[float | None, bool]:
@@ -195,7 +224,7 @@ def run_policies(db: Session, *, now: datetime | None = None, catalog: tuple[The
     if not new_platform_controls(db):
         return out
     curves = {c.key: c.nodes for c in db.scalars(select(ThermalCurve))}
-    for policy in db.scalars(select(ThermalPolicy).where(ThermalPolicy.enabled.is_(True), ThermalPolicy.mode.in_(("fixed", "curve")))):
+    for policy in db.scalars(select(ThermalPolicy).where(ThermalPolicy.enabled.is_(True), ThermalPolicy.mode.in_(("fixed", "curve", "preset")))):
         asset = db.get(Asset, policy.asset_id, options=[selectinload(Asset.endpoints)])
         if asset is None or asset.lifecycle != "active":
             continue
@@ -212,14 +241,16 @@ def run_policies(db: Session, *, now: datetime | None = None, catalog: tuple[The
             _note(policy, now, d.message)
             out["skipped"] += 1
             continue
-        params = {"pwm": d.pwm} if d.pwm is not None else {}
+        params: dict[str, Any] = {"pwm": d.pwm} if d.pwm is not None else {}
+        if d.preset:
+            params = {"preset": d.preset, "speeds": list(PRESETS[d.preset]["speeds"])}
         try:
             thermal_gate(db, asset, d.action, params, catalog=catalog)
         except Rejected as exc:
             _note(policy, now, f"{d.message}，但无法执行：{exc}")
             out["ungoverned"] += 1
             continue
-        req = f"{d.action}:{d.pwm}"
+        req = f"{d.action}:{d.preset or d.pwm}"
         if policy.last_request_key == req and policy.last_request_at and _aware(policy.last_request_at) > now - RETRY_AFTER:
             last = db.scalar(select(ControlOperation).where(ControlOperation.asset_id == asset.id, ControlOperation.kind == "thermal")
                              .order_by(ControlOperation.created_at.desc()).limit(1))
@@ -259,13 +290,15 @@ def governance_metrics(db: Session, *, now: datetime | None = None, catalog: tup
         if asset is None or asset.lifecycle != "active":
             continue
         target = thermal_target(db, asset)
-        maybe_manual = policy.legacy_mode in ("manual", "dynamic", "preset") or (target is not None and target.thermal_mode in ("manual", "unknown") and target.thermal_updated_at is not None)
+        maybe_manual = policy.legacy_mode in ("manual", "dynamic", "preset") or (target is not None and target.thermal_mode in ("manual", "per_fan", "unknown") and target.thermal_updated_at is not None)
         governed = True
         reason = ""
         if maybe_manual:
-            action = "restore_auto" if policy.mode == "auto" or not policy.enabled else "set_speed_all"
+            action = ("restore_auto" if policy.mode == "auto" or not policy.enabled
+                      else "set_speed_per_fan" if policy.mode == "preset" else "set_speed_all")
+            probe = {"set_speed_all": {"pwm": 100}, "set_speed_per_fan": {"speeds": [100]}}.get(action, {})
             try:
-                thermal_gate(db, asset, action, {"pwm": 100} if action == "set_speed_all" else {}, catalog=catalog)
+                thermal_gate(db, asset, action, probe, catalog=catalog)
             except Rejected as exc:
                 if exc.code != "busy":
                     governed, reason = False, str(exc)

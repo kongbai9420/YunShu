@@ -22,6 +22,8 @@ interface Builtin {
   safe_max_pwm: number
   restore_commands: string
   set_commands: string
+  fan_commands: string
+  per_fan: boolean
   description: string
 }
 interface Custom {
@@ -33,6 +35,7 @@ interface Custom {
   firmware_max: string
   restore_commands: string
   set_commands: string
+  fan_commands: string
   pwm_scale: "percent" | "byte"
   safe_min_pwm: number
   safe_max_pwm: number
@@ -57,6 +60,7 @@ const EMPTY: Draft = {
   firmware_max: "",
   restore_commands: "",
   set_commands: "",
+  fan_commands: "",
   pwm_scale: "percent",
   safe_min_pwm: "20",
   safe_max_pwm: "100",
@@ -119,6 +123,7 @@ export function ThermalCommands() {
                   <span className="font-medium">{c.name}</span>
                   <Badge tone={c.enabled ? "ok" : "neutral"}>{c.enabled ? "已启用" : "已停用"}</Badge>
                   <Badge tone="neutral">IPMI</Badge>
+                  {c.fan_commands ? <Badge tone="neutral">可按风扇设定</Badge> : null}
                   {can_edit && !editing ? (
                     <span className="ml-auto flex gap-1">
                       <Button
@@ -135,7 +140,7 @@ export function ThermalCommands() {
                   ) : null}
                 </div>
                 <Matching vendor={c.vendor} model={c.model_pattern || "所有型号"} firmware={range(c.firmware_min, c.firmware_max)} />
-                <Commands restore={c.restore_commands} set={c.set_commands} />
+                <Commands restore={c.restore_commands} set={c.set_commands} fan={c.fan_commands} />
                 <p className="text-xs text-muted-foreground">
                   转速 {c.safe_min_pwm}–{c.safe_max_pwm}%，{c.pwm_scale === "byte" ? "按 0–255 换算" : "按百分比填入"}
                   {c.note ? ` · ${c.note}` : ""}
@@ -155,6 +160,7 @@ export function ThermalCommands() {
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-medium">{b.label}</span>
                 <Badge tone="neutral">{b.transport}</Badge>
+                {b.per_fan ? <Badge tone="neutral">可按风扇设定</Badge> : null}
                 <Badge tone={b.source === "builtin_audited" ? "ok" : "warn"}>{b.source === "builtin_audited" ? "已实机验证" : "未实机验证"}</Badge>
               </div>
               <Matching
@@ -162,7 +168,7 @@ export function ThermalCommands() {
                 model={b.model_pattern === ".*" ? "所有型号" : b.model_pattern}
                 firmware={range(b.firmware_min, b.firmware_max)}
               />
-              {b.restore_commands || b.set_commands ? <Commands restore={b.restore_commands} set={b.set_commands} /> : null}
+              {b.restore_commands || b.set_commands ? <Commands restore={b.restore_commands} set={b.set_commands} fan={b.fan_commands} /> : null}
               <p className="text-xs text-muted-foreground">
                 {b.description}
                 {b.safe_min_pwm ? ` 安全下限 ${b.safe_min_pwm}%。` : ""}
@@ -183,9 +189,9 @@ function Matching({ vendor, model, firmware }: { vendor: string; model: string; 
   )
 }
 
-function Commands({ restore, set }: { restore: string; set: string }) {
+function Commands({ restore, set, fan }: { restore: string; set: string; fan?: string }) {
   return (
-    <div className="grid gap-2 text-xs sm:grid-cols-2">
+    <div className={`grid gap-2 text-xs ${fan ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
       <div className="min-w-0">
         <p className="text-muted-foreground">恢复原厂温控</p>
         <pre className="overflow-x-auto rounded-md bg-muted px-2 py-1 font-mono">{restore || "—"}</pre>
@@ -194,6 +200,12 @@ function Commands({ restore, set }: { restore: string; set: string }) {
         <p className="text-muted-foreground">设定转速</p>
         <pre className="overflow-x-auto rounded-md bg-muted px-2 py-1 font-mono">{set || "—"}</pre>
       </div>
+      {fan ? (
+        <div className="min-w-0">
+          <p className="text-muted-foreground">按风扇设定</p>
+          <pre className="overflow-x-auto rounded-md bg-muted px-2 py-1 font-mono">{fan}</pre>
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -277,6 +289,16 @@ function CommandForm({ id, initial, done, cancel }: { id: string | null; initial
           />
         </LabeledField>
       </div>
+      <LabeledField label="按风扇设定转速的命令（可选）" help="thermal.cmd.fan">
+        <textarea
+          data-help-wrapped=""
+          className={areaClass}
+          spellCheck={false}
+          placeholder={"0x30 0x30 0x01 0x00\n0x30 0x30 0x02 {fan} {pwm}"}
+          value={d.fan_commands}
+          onChange={(e) => set("fan_commands", e.target.value)}
+        />
+      </LabeledField>
       <div className="flex flex-wrap items-end gap-3">
         <LabeledField label="转速刻度" help="thermal.cmd.scale">
           <select

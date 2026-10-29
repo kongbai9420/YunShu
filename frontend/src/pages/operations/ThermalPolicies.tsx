@@ -6,6 +6,7 @@ import { Badge } from "@/components/status"
 import { Button } from "@/components/ui/button"
 import { Card, InlineNotice } from "@/components/ui/controls"
 import { ApiError, api, query, type Asset, type Page } from "@/lib/api"
+import type { FanPreset } from "@/lib/control"
 import { dateText, usePoll } from "@/lib/monitor"
 
 interface Node {
@@ -23,8 +24,9 @@ interface Curve {
 interface Policy {
   asset_id: string
   asset_name: string
-  mode: "auto" | "fixed" | "curve"
+  mode: "auto" | "fixed" | "curve" | "preset"
   fixed_pwm: number | null
+  preset_key: string
   enabled: boolean
   revision: number
   source: string
@@ -38,9 +40,10 @@ interface Listing {
   policies: Policy[]
   curve: Curve
   fuse_hysteresis: number
+  presets: FanPreset[]
 }
 
-const MODE_LABEL = { auto: "原厂自动", fixed: "固定转速", curve: "按曲线" }
+const MODE_LABEL = { auto: "原厂自动", fixed: "固定转速", curve: "按曲线", preset: "情景方案" }
 const LEGACY_LABEL: Record<string, string> = { auto: "自动", manual: "手动", dynamic: "曲线", preset: "情景方案" }
 const inputClass = "h-8 w-20 rounded-md border bg-card px-2 text-[0.8125rem] text-foreground"
 
@@ -53,6 +56,7 @@ export function ThermalPolicies({ editable, legacy, curveEditable = editable }: 
       </InlineNotice>
     )
   if (!data.data) return <p className="text-muted-foreground">正在读取温控策略…</p>
+  const presets = data.data.presets ?? []
   return (
     <div className="min-w-0 space-y-4">
       {legacy ? (
@@ -67,7 +71,7 @@ export function ThermalPolicies({ editable, legacy, curveEditable = editable }: 
         {data.data.policies.length ? (
           <ul className="space-y-3">
             {data.data.policies.map((p) => (
-              <PolicyRow key={`${p.asset_id}-${p.revision}`} policy={p} editable={editable} saved={data.refresh} />
+              <PolicyRow key={`${p.asset_id}-${p.revision}`} policy={p} presets={presets} editable={editable} saved={data.refresh} />
             ))}
           </ul>
         ) : (
@@ -212,12 +216,17 @@ function CurveEditor({ curve, hysteresis, editable, saved }: { curve: Curve; hys
   )
 }
 
-function PolicyRow({ policy, editable, saved }: { policy: Policy; editable: boolean; saved: () => void }) {
+function PolicyRow({ policy, presets, editable, saved }: { policy: Policy; presets: FanPreset[]; editable: boolean; saved: () => void }) {
   const [mode, setMode] = useState(policy.mode)
   const [pwm, setPwm] = useState(policy.fixed_pwm != null ? String(policy.fixed_pwm) : "")
+  const [presetKey, setPresetKey] = useState(policy.preset_key || "")
   const [enabled, setEnabled] = useState(policy.enabled)
   const [error, setError] = useState("")
-  const dirty = mode !== policy.mode || enabled !== policy.enabled || (mode === "fixed" && pwm !== String(policy.fixed_pwm ?? ""))
+  const dirty =
+    mode !== policy.mode ||
+    enabled !== policy.enabled ||
+    (mode === "fixed" && pwm !== String(policy.fixed_pwm ?? "")) ||
+    (mode === "preset" && presetKey !== (policy.preset_key || ""))
   async function save() {
     setError("")
     try {
@@ -225,6 +234,7 @@ function PolicyRow({ policy, editable, saved }: { policy: Policy; editable: bool
         revision: policy.revision,
         mode,
         fixed_pwm: mode === "fixed" && /^\d{1,3}$/.test(pwm) ? Number(pwm) : null,
+        preset_key: mode === "preset" ? presetKey : "",
         enabled,
       })
       saved()
@@ -260,6 +270,24 @@ function PolicyRow({ policy, editable, saved }: { policy: Policy; editable: bool
         {mode === "fixed" ? (
           <LabeledField label="固定转速 %" help="thermal.fixed">
             <input data-help-wrapped="" className={inputClass} inputMode="numeric" value={pwm} disabled={!editable} onChange={(e) => setPwm(e.target.value.trim())} />
+          </LabeledField>
+        ) : null}
+        {mode === "preset" ? (
+          <LabeledField label="情景方案" help="thermal.preset">
+            <select
+              data-help-wrapped=""
+              className="h-8 rounded-md border bg-card px-2 text-[0.8125rem] text-foreground"
+              value={presetKey}
+              disabled={!editable}
+              onChange={(e) => setPresetKey(e.target.value)}
+            >
+              <option value="">选择方案</option>
+              {presets.map((p) => (
+                <option key={p.key} value={p.key}>
+                  {p.name}（{p.speeds.join(" / ")}%）
+                </option>
+              ))}
+            </select>
           </LabeledField>
         ) : null}
         <CheckField label="启用" help="thermal.enabled" checked={enabled} disabled={!editable} onChange={setEnabled} />

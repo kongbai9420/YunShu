@@ -10,8 +10,8 @@ def test_health_returns_ok_and_version() -> None:
     response = client.get("/api/health")
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "version": "4.4.0-beta.1"}
-    assert __version__ == "4.4.0-beta.1"
+    assert response.json() == {"status": "ok", "version": "4.4.0-beta.2"}
+    assert __version__ == "4.4.0-beta.2"
 
 
 def test_serves_built_frontend_without_shadowing_api(tmp_path) -> None:  # type: ignore[no-untyped-def]

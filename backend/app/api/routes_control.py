@@ -25,7 +25,8 @@ from app.control.service import (
 from app.control.cutover import change_owner, describe as cutover_describe, probe_legacy
 from app.control.policy import DEFAULT_SAFETY_TEMP, FUSE_HYSTERESIS, CurveError, safety_temp, validate_nodes
 from app.control.thermal import (
-    PRODUCTION_CATALOG, SOURCE_LABEL, TRANSPORT_LABEL, ThermalProfile, _version_tuple, custom_profile, parse_commands,
+    PRESETS, PRODUCTION_CATALOG, SOURCE_LABEL, TRANSPORT_LABEL, ThermalOperation, ThermalProfile, _version_tuple, custom_profile,
+    parse_commands,
 )
 from app.models import Asset, ControlOperation, ControlTarget, ThermalCommandProfile, ThermalCurve, ThermalPolicy, User
 
@@ -195,10 +196,18 @@ def asset_thermal(asset_id: uuid.UUID, request: Request, user: User = Depends(re
     return {"asset_id": str(a.id), "asset_name": a.name, **describe_thermal(db, a, _catalog(request))}
 
 
+@router.get("/thermal/presets")
+def thermal_presets(_: User = Depends(reader)) -> list[dict[str, Any]]:
+    return [{"key": k, "name": v["name"], "desc": v["desc"], "speeds": v["speeds"]} for k, v in PRESETS.items()]
+
+
 class ThermalRequest(BaseModel):
     asset_ids: list[uuid.UUID] = Field(min_length=1, max_length=MAX_BATCH)
     action: str
     pwm: int | None = None
+    # 按风扇设定：直接给每个风扇的转速，或给情景方案的键（二选一，情景方案优先）
+    speeds: list[int] | None = None
+    preset: str | None = Field(default=None, max_length=32)
     confirm: str = ""
     reason: str = Field(default="", max_length=500)
     request_key: str = Field(min_length=8, max_length=100)
@@ -207,7 +216,11 @@ class ThermalRequest(BaseModel):
 @router.post("/thermal", status_code=status.HTTP_202_ACCEPTED)
 def thermal(body: ThermalRequest, request: Request, actor: User = Depends(editor), db: Session = Depends(get_db)) -> dict[str, Any]:
     _require_assets(db, actor, body.asset_ids)
-    params = {"pwm": body.pwm} if body.pwm is not None else {}
+    params: dict[str, Any] = {"pwm": body.pwm} if body.pwm is not None else {}
+    if body.speeds is not None:
+        params["speeds"] = body.speeds
+    if body.preset:
+        params["preset"] = body.preset
     try:
         return request_thermal(db, actor, body.asset_ids, body.action, params, confirm=body.confirm, reason=body.reason,
                                request_key=body.request_key, catalog=_catalog(request))
@@ -251,7 +264,8 @@ def acknowledge(body: AckRequest, actor: User = Depends(editor), db: Session = D
 
 def _policy_out(p: ThermalPolicy, name: str) -> dict[str, Any]:
     return {
-        "asset_id": str(p.asset_id), "asset_name": name, "mode": p.mode, "fixed_pwm": p.fixed_pwm, "curve_key": p.curve_key,
+        "asset_id": str(p.asset_id), "asset_name": name, "mode": p.mode, "fixed_pwm": p.fixed_pwm, "preset_key": p.preset_key,
+        "curve_key": p.curve_key,
         "enabled": p.enabled, "revision": p.revision, "source": p.source, "legacy_mode": p.legacy_mode, "pending_note": p.pending_note,
         "fuse_state": p.fuse_state, "last_decision": p.last_decision,
         "last_decision_at": p.last_decision_at.isoformat() if p.last_decision_at else None, "updated_by": p.updated_by,
@@ -270,13 +284,16 @@ def thermal_policies(user: User = Depends(reader), db: Session = Depends(get_db)
     stmt = restrict(select(ThermalPolicy, Asset.name).join(Asset, Asset.id == ThermalPolicy.asset_id), Asset.id, scope_for(db, user))
     rows = db.execute(stmt.order_by(Asset.name)).all()
     curve = db.scalar(select(ThermalCurve).where(ThermalCurve.key == "default"))
-    return {"policies": [_policy_out(p, n) for p, n in rows], "curve": _curve_out(curve), "fuse_hysteresis": FUSE_HYSTERESIS}
+    presets = [{"key": k, "name": v["name"], "desc": v["desc"], "speeds": v["speeds"]} for k, v in PRESETS.items()]
+    return {"policies": [_policy_out(p, n) for p, n in rows], "curve": _curve_out(curve), "fuse_hysteresis": FUSE_HYSTERESIS,
+            "presets": presets}
 
 
 class PolicyUpdate(BaseModel):
     revision: int = Field(ge=0)
     mode: str
     fixed_pwm: int | None = Field(default=None, ge=0, le=100)
+    preset_key: str = Field(default="", max_length=32)
     enabled: bool
 
 
@@ -286,10 +303,12 @@ def update_policy(asset_id: uuid.UUID, body: PolicyUpdate, actor: User = Depends
     a = db.get(Asset, asset_id)
     if a is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "资产不存在或你无权查看")
-    if body.mode not in ("auto", "fixed", "curve"):
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "温控模式只能是原厂自动、固定转速或曲线")
+    if body.mode not in ("auto", "fixed", "curve", "preset"):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "温控模式只能是原厂自动、固定转速、曲线或情景方案")
     if body.mode == "fixed" and body.fixed_pwm is None:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "固定转速模式需要填写转速")
+    if body.mode == "preset" and body.preset_key not in PRESETS:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "请选择情景方案")
     p = db.scalar(select(ThermalPolicy).where(ThermalPolicy.asset_id == asset_id))
     current = p.revision if p else 0
     if body.revision != current:
@@ -299,12 +318,14 @@ def update_policy(asset_id: uuid.UUID, body: PolicyUpdate, actor: User = Depends
         p = ThermalPolicy(asset_id=asset_id, revision=0)
         db.add(p)
     p.mode, p.fixed_pwm, p.enabled = body.mode, body.fixed_pwm if body.mode == "fixed" else None, body.enabled
+    p.preset_key = body.preset_key if body.mode == "preset" else ""
     p.revision += 1
     p.source, p.pending_note, p.updated_by = "user", "", actor.display_name or actor.username
     p.last_request_key = ""
     db.flush()
     audit.record(db, actor, "thermal.policy.update", target_type="asset", target_id=asset_id,
-                 summary=f"温控策略改为 {body.mode}" + (f" {body.fixed_pwm}%" if body.mode == "fixed" else "") + ("（启用）" if body.enabled else "（停用）"))
+                 summary=f"温控策略改为 {body.mode}" + (f" {body.fixed_pwm}%" if body.mode == "fixed" else "")
+                 + (f"（情景方案 {PRESETS[body.preset_key]['name']}）" if body.mode == "preset" else "") + ("（启用）" if body.enabled else "（停用）"))
     return _policy_out(p, a.name)
 
 
@@ -345,6 +366,7 @@ def _builtin_out(p: ThermalProfile) -> dict[str, Any]:
         "transport": TRANSPORT_LABEL.get(p.transport, p.transport), "source": p.evidence.source.value,
         "source_label": SOURCE_LABEL.get(p.evidence.source, ""), "safe_min_pwm": p.safe_min_pwm, "safe_max_pwm": p.safe_max_pwm,
         "restore_commands": "\n".join(s.text() for s in p.restore_steps), "set_commands": "\n".join(s.text() for s in p.set_steps),
+        "fan_commands": "\n".join(s.text() for s in p.fan_steps), "per_fan": ThermalOperation.SET_SPEED_PER_FAN in p.operations,
         "description": p.description,
     }
 
@@ -353,6 +375,7 @@ def _custom_out(r: ThermalCommandProfile) -> dict[str, Any]:
     return {
         "id": str(r.id), "name": r.name, "vendor": r.vendor, "model_pattern": r.model_pattern, "firmware_min": r.firmware_min,
         "firmware_max": r.firmware_max, "restore_commands": r.restore_commands, "set_commands": r.set_commands,
+        "fan_commands": r.fan_commands or "",
         "pwm_scale": r.pwm_scale, "safe_min_pwm": r.safe_min_pwm, "safe_max_pwm": r.safe_max_pwm, "enabled": r.enabled,
         "note": r.note, "updated_by": r.updated_by, "updated_at": r.updated_at.isoformat() if r.updated_at else None,
     }
@@ -373,6 +396,7 @@ class CommandProfileBody(BaseModel):
     firmware_max: str = Field(default="", max_length=32)
     restore_commands: str = Field(max_length=2000)
     set_commands: str = Field(max_length=2000)
+    fan_commands: str = Field(default="", max_length=2000)
     pwm_scale: str = Field(default="percent", pattern="^(percent|byte)$")
     safe_min_pwm: int = Field(default=20, ge=0, le=100)
     safe_max_pwm: int = Field(default=100, ge=0, le=100)
@@ -395,11 +419,16 @@ def _check_profile(body: CommandProfileBody) -> None:
             parse_commands(text, needs_pwm=needs)
         except ValueError as exc:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"{label}的命令：{exc}") from exc
+    if body.fan_commands.strip():
+        try:
+            parse_commands(body.fan_commands, needs_pwm=True, per_fan=True)
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"按风扇设定转速的命令：{exc}") from exc
 
 
 def _apply_profile(row: ThermalCommandProfile, body: CommandProfileBody, actor: User) -> None:
     for k, v in body.model_dump().items():
-        setattr(row, k, v.strip() if isinstance(v, str) and k not in ("restore_commands", "set_commands", "note") else v)
+        setattr(row, k, v.strip() if isinstance(v, str) and k not in ("restore_commands", "set_commands", "fan_commands", "note") else v)
     row.vendor = row.vendor.lower()
     row.updated_by = actor.display_name or actor.username
     custom_profile(row)  # 已在 _check_profile 校验；这里再转一次保证能被匹配使用

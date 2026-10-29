@@ -48,6 +48,8 @@ class ControlTarget(Base):
     # unknown / auto / manual
     thermal_mode: Mapped[str] = mapped_column(String(16), default="unknown")
     applied_pwm: Mapped[int | None] = mapped_column(Integer)
+    # 按风扇设定（per_fan）时设备接受的每个风扇转速；其他模式为空
+    applied_speeds: Mapped[list[int] | None] = mapped_column(JSON)
     thermal_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
@@ -95,7 +97,7 @@ class ThermalCurve(UUIDPrimaryKey, Base):
 class ThermalPolicy(UUIDPrimaryKey, Base):
     """每台资产的温控策略（期望状态）。只有控制归属为新平台、策略启用且门禁通过时才会下发。
 
-    mode：auto（交给 BMC 原厂自动，不下发）/ fixed（固定转速）/ curve（按曲线）。
+    mode：auto（交给 BMC 原厂自动，不下发）/ fixed（固定转速）/ curve（按曲线）/ preset（情景方案，每个风扇各自的转速）。
     fuse_state：tripped 表示温度达到熔断温度后已请求恢复原厂自动，降到熔断温度减回差以下才恢复策略。
     """
 
@@ -104,6 +106,8 @@ class ThermalPolicy(UUIDPrimaryKey, Base):
     asset_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("assets.id", ondelete="CASCADE"), unique=True)
     mode: Mapped[str] = mapped_column(String(16), default="auto")
     fixed_pwm: Mapped[int | None] = mapped_column(Integer)
+    # mode=preset 时使用的情景方案（app.control.thermal.PRESETS 的键）
+    preset_key: Mapped[str] = mapped_column(String(32), default="")
     curve_key: Mapped[str] = mapped_column(String(32), default="default")
     enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     revision: Mapped[int] = mapped_column(Integer, default=1)
@@ -136,6 +140,8 @@ class ThermalCommandProfile(UUIDPrimaryKey, Base):
     firmware_max: Mapped[str] = mapped_column(String(32), default="")
     restore_commands: Mapped[str] = mapped_column(Text)
     set_commands: Mapped[str] = mapped_column(Text)
+    # 可选：按风扇设定转速的命令，含 {fan} 的行按风扇逐个发送
+    fan_commands: Mapped[str] = mapped_column(Text, default="")
     pwm_scale: Mapped[str] = mapped_column(String(16), default="percent")
     safe_min_pwm: Mapped[int] = mapped_column(Integer, default=20)
     safe_max_pwm: Mapped[int] = mapped_column(Integer, default=100)

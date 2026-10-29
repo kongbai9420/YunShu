@@ -436,3 +436,93 @@ def test_power_and_thermal_share_target_mutex(app_factory, factory, op) -> None:
     assert thermal(op, [aid], "restore_auto").json()["operations"][0]["status"] == "queued"
     p = op.post("/api/control/power", json={"asset_ids": [str(aid)], "action": "on", "request_key": uuid.uuid4().hex}).json()
     assert p["operations"][0]["status"] == "rejected" and "未完成的控制操作" in p["operations"][0]["message"]
+
+
+def per_fan(client, ids, *, preset=None, speeds=None, confirm="甲"):  # type: ignore[no-untyped-def]
+    body = {"asset_ids": [str(i) for i in ids], "action": "set_speed_per_fan", "confirm": confirm, "reason": "测试",
+            "request_key": uuid.uuid4().hex}
+    if preset:
+        body["preset"] = preset
+    if speeds is not None:
+        body["speeds"] = speeds
+    return client.post("/api/control/thermal", json=body)
+
+
+def test_preset_per_fan_on_dell_ipmi(app_factory, factory, op) -> None:  # type: ignore[no-untyped-def]
+    with factory() as db:
+        set_owner(db, "new")
+        aid = make_asset(db, app_factory.cipher).id
+    info = op.get(f"/api/control/assets/{aid}/thermal").json()
+    assert {p["key"] for p in info["presets"]} >= {"silent", "turbo", "one_node_l"}
+    assert per_fan(op, [aid], preset="silent", confirm="").json()["detail"]["code"] == "confirm"  # 高风险，要确认语
+    assert per_fan(op, [aid], preset="nope").status_code == 422
+    assert per_fan(op, [aid], speeds=[30, 30.5]).status_code == 422
+    r = per_fan(op, [aid], preset="one_node_l").json()["operations"][0]
+    assert r["status"] == "queued" and "单节点负载（左）" in r["action_label"]
+    bmc = FakeThermalBmc()
+    worker(app_factory, factory, bmc, catalog=PRODUCTION_CATALOG).run_once()
+    o = last_op(op, aid)
+    assert o["status"] == "unconfirmed"
+    speeds = [25, 40, 30, 25, 20, 20]
+    assert bmc.writes == [(0x30, 0x30, [0x01, 0x00])] + [(0x30, 0x30, [0x02, i, v]) for i, v in enumerate(speeds)]
+    with factory() as db:
+        t = db.get(ControlTarget, "bmc:192.0.2.30")
+        assert (t.thermal_mode, t.applied_pwm, t.applied_speeds) == ("per_fan", 40, speeds)
+    # 任一风扇低于安全下限：整体拒绝，不下发
+    per_fan(op, [aid], speeds=[30, 15, 30])
+    worker(app_factory, factory, bmc, catalog=PRODUCTION_CATALOG).run_once()
+    o = last_op(op, aid)
+    assert o["status"] == "rejected" and "风扇 2 的转速 15%" in o["message"] and len(bmc.writes) == 7
+    thermal(op, [aid], "restore_auto")
+    worker(app_factory, factory, bmc, catalog=PRODUCTION_CATALOG).run_once()
+    with factory() as db:
+        t = db.get(ControlTarget, "bmc:192.0.2.30")
+        assert (t.thermal_mode, t.applied_speeds) == ("auto", None)
+
+
+def test_per_fan_unsupported_models_rejected(app_factory, factory, op) -> None:  # type: ignore[no-untyped-def]
+    with factory() as db:
+        set_owner(db, "new")
+        aid = make_asset(db, app_factory.cipher).id
+    per_fan(op, [aid], preset="turbo")
+    bmc = FakeThermalBmc(Identity("Supermicro", "X11DPi-N", "1.73"))  # 超微只能按区
+    worker(app_factory, factory, bmc, catalog=PRODUCTION_CATALOG).run_once()
+    o = last_op(op, aid)
+    assert o["status"] == "rejected" and "不支持“按风扇设定转速”" in o["message"] and bmc.writes == []
+
+
+def test_huawei_per_fan_follows_device_fan_count(app_factory, factory, op) -> None:  # type: ignore[no-untyped-def]
+    with factory() as db:
+        set_owner(db, "new")
+        aid = redfish_only_asset(db, app_factory.cipher)
+    rf = FakeRedfishBmc("Huawei", "RH2288 V3", "3.23", HUAWEI_THERMAL)  # 设备报告 4 个风扇
+    per_fan(op, [aid], preset="one_node_r")
+    worker(app_factory, factory, None, PRODUCTION_CATALOG, rf).run_once()
+    assert last_op(op, aid)["status"] == "verified"
+    assert rf.patches[-1][1]["Oem"]["Huawei"]["FanSpeedLevelPercents"] == [20, 20, 25, 30]  # 多出来的风扇不下发
+    scalar = FakeRedfishBmc("Huawei", "RH2288 V3", "3.23", {"/redfish/v1/Chassis/1/Thermal": {"Oem": {"Huawei": {
+        "FanSpeedAdjustmentMode": "Automatic", "FanSpeedLevelPercents": 30}}}})
+    per_fan(op, [aid], preset="turbo")
+    worker(app_factory, factory, None, PRODUCTION_CATALOG, scalar).run_once()
+    o = last_op(op, aid)
+    assert o["status"] == "rejected" and "不支持按风扇设定" in o["message"] and scalar.patches == []
+
+
+def test_custom_per_fan_commands(app_factory, factory, op, admin) -> None:  # type: ignore[no-untyped-def]
+    with pytest.raises(ValueError, match=r"只能用在"):
+        parse_commands("0x3a 0x02 {fan} {pwm}", needs_pwm=True)
+    with pytest.raises(ValueError, match=r"同时含"):
+        parse_commands("0x3a 0x01 0x00\n0x3a 0x02 0x01 {pwm}", needs_pwm=True, per_fan=True)
+    bad = admin.post("/api/control/thermal/commands", json={**CUSTOM, "fan_commands": "0x3a 0x02 0x00 {pwm}"})
+    assert bad.status_code == 422 and "按风扇设定" in bad.json()["detail"]
+    created = admin.post("/api/control/thermal/commands", json={**CUSTOM, "pwm_scale": "percent",
+                                                                "fan_commands": "0x3a 0x01 0x00\n0x3a 0x02 {fan} {pwm}"})
+    assert created.status_code == 201 and created.json()["fan_commands"].endswith("{pwm}")
+    with factory() as db:
+        set_owner(db, "new")
+        aid = make_asset(db, app_factory.cipher).id
+    per_fan(op, [aid], speeds=[30, 50])
+    bmc = FakeThermalBmc(Identity("Lenovo", "ThinkSystem SR650", "5.10"))
+    worker(app_factory, factory, bmc, catalog=PRODUCTION_CATALOG).run_once()
+    assert last_op(op, aid)["status"] == "unconfirmed"
+    assert bmc.writes == [(0x3A, 0x01, [0x00]), (0x3A, 0x02, [0, 30]), (0x3A, 0x02, [1, 50])]
