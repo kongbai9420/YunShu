@@ -342,7 +342,13 @@ def test_hpe_cooling_levels(app_factory, factory, op) -> None:  # type: ignore[n
         assert last_op(op, aid)["status"] == "verified"
     with factory() as db:
         t = db.get(ControlTarget, "bmc:192.0.2.30")
-        assert (t.thermal_mode, t.applied_pwm) == ("auto", None)  # 最佳散热就是原厂自动
+        assert (t.thermal_mode, t.applied_pwm) == ("manual", 30)  # 平台下发的档位，策略据此不重复提交
+    thermal(op, [aid], "restore_auto")
+    worker(app_factory, factory, None, PRODUCTION_CATALOG, rf).run_once()
+    assert rf.patches[-1][1] == {"Oem": {"Hpe": {"ThermalConfiguration": "OptimalCooling"}}}
+    with factory() as db:
+        t = db.get(ControlTarget, "bmc:192.0.2.30")
+        assert (t.thermal_mode, t.applied_pwm) == ("auto", None)
 
 
 def test_redfish_without_fan_settings_is_rejected(app_factory, factory, op) -> None:  # type: ignore[no-untyped-def]

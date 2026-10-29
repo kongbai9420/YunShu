@@ -16,7 +16,7 @@ from app.control.policy import (
     validate_nodes,
 )
 from app.metrics import Point
-from app.models import Alert, ControlOperation, ControlTarget, LegacyMapping, ThermalCurve, ThermalPolicy
+from app.models import Alert, Asset, ControlOperation, ControlTarget, LegacyMapping, ThermalCurve, ThermalPolicy
 from tests.api_helpers import add_user, login
 from tests.test_control_power import make_asset, set_owner
 from tests.test_control_thermal import FIXTURE
@@ -215,3 +215,35 @@ def test_policy_and_curve_api(app_factory, factory) -> None:  # type: ignore[no-
     assert op.put("/api/control/thermal/curves/default", json={"revision": 0, "nodes": NODES}).status_code == 409
     listing = v.get("/api/control/thermal/policies").json()
     assert listing["policies"][0]["mode"] == "fixed" and listing["curve"]["revision"] == 1
+
+
+@pytest.mark.parametrize(("vendor", "model", "thermal", "pwm"), [
+    ("Huawei", "RH2288 V3", {"Oem": {"Huawei": {"FanSpeedAdjustmentMode": "Automatic", "FanSpeedLevelPercents": 30}}}, 40),
+    # HPE 低于 50% 落在“最佳散热”档：仍记为平台已下发，不能每轮重复提交
+    ("HPE", "ProLiant DL380 Gen10", {"Oem": {"Hpe": {"ThermalConfiguration": "OptimalCooling"}}}, 30),
+])
+def test_redfish_only_policy_is_not_resent_every_cycle(app_factory, factory, vendor, model, thermal, pwm) -> None:  # type: ignore[no-untyped-def]
+    from app.control.thermal import PRODUCTION_CATALOG
+    from tests.test_control_thermal import FakeRedfishBmc, worker
+
+    with factory() as db:
+        set_owner(db, "new")
+        aid = _setup(db, app_factory.cipher, "fixed", pwm)
+        asset = db.get(Asset, aid)
+        asset.endpoints[0].protocol, asset.endpoints[0].port = "redfish", 443  # 只有 Redfish 端点
+        db.commit()
+        _temp(db, aid, 50.0)
+        assert run_policies(db, now=NOW, catalog=PRODUCTION_CATALOG)["requested"] == 1
+        db.commit()
+    rf = FakeRedfishBmc(vendor, model, "3.10", {"/redfish/v1/Chassis/1/Thermal": thermal})
+    worker(app_factory, factory, None, PRODUCTION_CATALOG, rf).run_once()
+    with factory() as db:
+        first = db.scalar(select(ControlOperation))
+        assert first.status == "verified", first.message
+        for i in range(1, 4):
+            at = NOW + timedelta(seconds=15 * i)
+            _temp(db, aid, 50.0, at)
+            assert run_policies(db, now=at, catalog=PRODUCTION_CATALOG)["requested"] == 0
+            db.commit()
+        assert len(db.scalars(select(ControlOperation)).all()) == 1 and len(rf.patches) == 1
+        assert "不调整" in db.scalar(select(ThermalPolicy)).last_decision

@@ -329,6 +329,18 @@ def thermal_params(action: str, params: dict[str, Any]) -> tuple[ThermalOperatio
         raise Rejected(exc.code, str(exc)) from exc
 
 
+def thermal_endpoints(asset: Asset) -> list[ManagementEndpoint]:
+    """风扇控制可用的端点：IPMI 优先，其次 Redfish（都只用用途为“控制 / 管理”的）。第一个用来识别设备，也决定控制目标。"""
+    return [e for e in (control_endpoint(asset), redfish_endpoint(asset)) if e is not None]
+
+
+def thermal_target(db: Session, asset: Asset) -> ControlTarget | None:
+    """风扇控制的目标记录（已下发的模式与转速）；与 thermal_gate 选择端点的规则一致。"""
+    eps = [e for e in thermal_endpoints(asset) if e.credential_id is not None] or thermal_endpoints(asset)
+    key = target_key(eps[0].address) if eps else None
+    return db.get(ControlTarget, key) if key else None
+
+
 @dataclass
 class ThermalGate(Gate):
     """风扇控制可用 IPMI 或 Redfish：endpoint 用来识别设备，alt 是另一种协议的端点（命令需要时使用）。"""
@@ -355,7 +367,7 @@ def thermal_gate(
 ) -> ThermalGate:
     thermal_params(action, params)
     _platform_checks(db, asset)
-    eps = [e for e in (control_endpoint(asset), redfish_endpoint(asset)) if e is not None]
+    eps = thermal_endpoints(asset)
     if not eps:
         raise Rejected("no_endpoint", "资产没有可用于控制的 IPMI 或 Redfish 端点（用途为“仅监控”的端点不能用于控制）")
     eps = [e for e in eps if e.credential_id is not None]
@@ -382,8 +394,8 @@ def _actions_out(items: list[tuple[str, str, bool]], check: Callable[[str], Gate
     return out
 
 
-def _target_out(db: Session, asset: Asset) -> dict[str, Any]:
-    ep = control_endpoint(asset)
+def _target_out(db: Session, asset: Asset, ep: ManagementEndpoint | None = None) -> dict[str, Any]:
+    ep = ep or control_endpoint(asset)
     key = target_key(ep.address) if ep else None
     t = db.get(ControlTarget, key) if key else None
     return {
@@ -409,7 +421,7 @@ THERMAL_ACTIONS = [(ThermalOperation.RESTORE_AUTO.value, OPERATION_LABEL[Thermal
 def describe_thermal(db: Session, asset: Asset, catalog: tuple[ThermalProfile, ...]) -> dict[str, Any]:
     probe = {ThermalOperation.SET_SPEED_ALL.value: {"pwm": 100}}
     return {
-        **_target_out(db, asset), "catalog_size": len(thermal_catalog(db, catalog)),
+        **_target_out(db, asset, next(iter(thermal_endpoints(asset)), None)), "catalog_size": len(thermal_catalog(db, catalog)),
         "actions": _actions_out(THERMAL_ACTIONS, lambda k: thermal_gate(db, asset, k, probe.get(k, {}), catalog=catalog)),
         "note": "执行时先读取设备的厂商、型号与 BMC 固件，再在风扇命令库里匹配要用的命令；资产上填写的品牌型号不作为依据。"
                 "内置命令大多整理自厂商文档与社区资料，未经本项目实机验证，请先在非生产设备上试用。",
@@ -677,6 +689,8 @@ def _check_requester_scope(db: Session, op: ControlOperation, asset_id: uuid.UUI
     """执行前按发起人当前的资产范围复核（4.1 P11）：撤销后未执行的操作被拒绝，不发送命令。"""
     from app.scope import can_see, scope_for
 
+    if op.requested_by_id is None and op.kind == "thermal" and op.requested_by == SYSTEM_POLICY:
+        return  # 温控策略（曲线、熔断）自己发起的：没有发起人，只按门禁执行
     requester = db.get(User, op.requested_by_id) if op.requested_by_id else None
     if requester is None or not requester.is_active or not can_see(db, scope_for(db, requester), asset_id):
         raise Rejected("scope", "发起人已无权控制该资产（账号被停用或资产范围已收窄）")

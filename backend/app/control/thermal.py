@@ -509,9 +509,12 @@ class HpeRedfishCoolingDriver:
             level, name = next((k, n) for k, n, low in HPE_LEVELS if (pwm or 0) >= low)
         _rf_patch(c, path, {"Oem": {"Hpe": {"ThermalConfiguration": level}}}, etag)
         after = ((c.get(path)[0].get("Oem") or {}).get("Hpe") or {}).get("ThermalConfiguration")
-        auto = level == "OptimalCooling"
-        return DriverResult([f"散热档位 = {name}（{level}）"], verified=after == level, mode="auto" if auto else "manual",
-                            pwm=None if auto else pwm, note=f"iLO 只能按档位设置，已设为“{name}”")
+        # 固定转速 / 曲线下发的档位都记为“平台在管”（manual + 请求的转速），即使落在最佳散热档：
+        # 策略据此判断已下发、不再重复提交；恢复原厂温控才记为 auto
+        if op == ThermalOperation.RESTORE_AUTO:
+            return DriverResult([f"散热档位 = {name}（{level}）"], verified=after == level, mode="auto")
+        return DriverResult([f"散热档位 = {name}（{level}）"], verified=after == level, mode="manual", pwm=pwm,
+                            note=f"iLO 只能按档位设置，{pwm}% 对应“{name}”")
 
 
 DRIVERS: dict[str, Any] = {
