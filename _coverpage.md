@@ -14,7 +14,10 @@
 
 <p class="cover-note">测试版：设备适配目前只用模拟设备验证过，请先在测试环境试用。</p>
 
+<p class="cover-note">💬 QQ 内测群 <b>317151818</b> · 试用问题与设备适配反馈欢迎进群交流</p>
+
 [开始阅读](/wiki/README.md)
 [快速开始](/wiki/quick-start.md)
 [下载](https://github.com/kongbai9420/YunShu/releases)
 [GitHub](https://github.com/kongbai9420/YunShu)
+[QQ 交流群](https://qm.qq.com/q/C2VkzggZge)
