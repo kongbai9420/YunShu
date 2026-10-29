@@ -164,9 +164,12 @@ def test_build_targets_glibc_228_baseline():
     script = (ROOT / "scripts" / "build-linux.sh").read_text(encoding="utf-8")
     assert 'GLIBC_MAX="${YUNSHU_GLIBC_MAX:-2.28}"' in script
     assert re.search(r'^BUILD_IMAGE="almalinux:8@sha256:[0-9a-f]{64}"\r?$', script, re.M)
-    # SQLite 源码按固定版本与 SHA-256 下载；打进包里的必须是它（EL8 自带 3.26 不支持 RETURNING）
-    assert re.search(r"^SQLITE_SHA256=[0-9a-f]{64}\r?$", script, re.M)
-    assert 'sha256sum <"$SQLITE_BUNDLED"' in script and "/proc/$API_PID/maps" in script
+    # Python 运行时按固定版本与 SHA-256 下载（SQLite 编译在 libpython 里；EL8 自带的 3.26 不支持 RETURNING），
+    # 打进包里、运行时加载的 libpython 必须是它
+    for arch in ("amd64", "arm64"):
+        assert re.search(rf"^PYTHON_SHA256_{arch}=[0-9a-f]{{64}}\r?$", script, re.M), arch
+    assert re.search(r"^PYTHON_VERSION=3\.11\.\d+\r?$", script, re.M)
+    assert "sha256sum -c" in script and 'sha256sum <"$PYLIB_BUNDLED"' in script and "/proc/$API_PID/maps" in script
 
 
 def test_workflow_publishes_expected_artifacts():
