@@ -16,6 +16,13 @@
       "reviewed_at": "2026-10-18"
     },
     {
+      "name": "python",
+      "version": "3.11.18",
+      "license": "PSF-2.0",
+      "evidence": "Linux 压缩包里的 CPython 运行时（python-build-standalone 20261026 的 install_only 构建），按 CPython 发行许可（Python Software Foundation License Version 2）；随包 licenses/python-runtime/LICENSE.txt",
+      "reviewed_at": "2026-10-29"
+    },
+    {
       "name": "yunshu-ops",
       "version": "*",
       "license": "MIT",
