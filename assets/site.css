@@ -74,14 +74,16 @@ section.cover {
               linear-gradient(135deg, #0b1a33 0%, #0f2a52 55%, #0b1a33 100%) !important;
   color: #e8eef8;
 }
-section.cover .cover-main { max-width: 760px; }
+/* 限宽后用 auto 外边距居中（Docsify 默认是左右 16px，限宽后会靠左） */
+section.cover .cover-main { max-width: 760px; width: 100%; margin: 0 auto; padding: 0 16px; box-sizing: border-box; }
 section.cover .cover-main > p:first-child img { filter: drop-shadow(0 8px 24px rgba(0, 0, 0, .35)); }
 section.cover h1 { color: #ffffff; font-size: 2.8rem; font-weight: 700; margin: 12px 0 6px; }
 section.cover h1 a, section.cover h1 a span { color: #ffffff; }
-section.cover h1 small { font-size: .9rem; font-weight: 600; color: #9cc4ff; vertical-align: super; margin-left: 4px; }
+section.cover h1 small { display: inline-block; vertical-align: middle; margin-left: 10px; padding: 2px 10px; border-radius: 999px;
+  border: 1px solid rgba(156, 196, 255, .45); background: rgba(255, 255, 255, .06); font-size: .8rem; font-weight: 600; color: #9cc4ff; }
 section.cover blockquote { margin: 10px auto 22px; }
 section.cover blockquote > p { color: #c9d6ea; font-size: 1.05rem; }
-section.cover ul { color: #c9d6ea; max-width: 520px; }
+section.cover ul { color: #c9d6ea; max-width: 520px; margin-left: auto; margin-right: auto; }
 section.cover ul li { color: #c9d6ea; font-size: .95rem; }
 section.cover .cover-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 0 auto 18px; }
 section.cover .cover-chips span { border: 1px solid rgba(156, 196, 255, .45); color: #cfe2ff; background: rgba(255, 255, 255, .06); border-radius: 999px; padding: 3px 12px; font-size: 12px; letter-spacing: .03em; }
