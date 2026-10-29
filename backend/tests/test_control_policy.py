@@ -72,7 +72,7 @@ def legacy(db, asset_id, mode, **extra):  # type: ignore[no-untyped-def]
 
 def test_migrate_legacy(app_factory, factory) -> None:  # type: ignore[no-untyped-def]
     with factory() as db:
-        ids = [make_asset(db, app_factory.cipher, n, f"192.0.2.{50 + i}").id for i, n in enumerate("甲乙丙丁戊")]
+        ids = [make_asset(db, app_factory.cipher, n, f"192.0.2.{50 + i}").id for i, n in enumerate("甲乙丙丁戊己")]
         db.add(LegacyMapping(source="yunshu-3", legacy_kind="curve_nodes", legacy_id="global", target_type="pending",
                              payload={"items": NODES}))
         legacy(db, ids[0], "auto")
@@ -80,15 +80,17 @@ def test_migrate_legacy(app_factory, factory) -> None:  # type: ignore[no-untype
         legacy(db, ids[2], "dynamic")
         legacy(db, ids[3], "preset", preset_key="silent")
         legacy(db, ids[4], "manual", manual_speed="abc")
+        legacy(db, ids[5], "preset", preset_key="no_such_preset")
         db.commit()
-        assert migrate_legacy(db) == {"curve": 1, "policies": 5, "pending": 2}
+        assert migrate_legacy(db) == {"curve": 1, "policies": 6, "pending": 2}
         db.commit()
         assert migrate_legacy(db) == {"curve": 0, "policies": 0, "pending": 0}  # 只迁一次
         got = {p.asset_id: p for p in db.scalars(select(ThermalPolicy))}
         assert (got[ids[0]].mode, got[ids[0]].enabled) == ("auto", True)
         assert (got[ids[1]].mode, got[ids[1]].fixed_pwm, got[ids[1]].enabled) == ("fixed", 35, True)
         assert got[ids[2]].mode == "curve"
-        assert got[ids[3]].mode == "auto" and not got[ids[3]].enabled and "情景方案" in got[ids[3]].pending_note
+        assert (got[ids[3]].mode, got[ids[3]].preset_key, got[ids[3]].enabled) == ("preset", "silent", True)  # 旧版情景方案直接迁入
+        assert got[ids[5]].mode == "auto" and not got[ids[5]].enabled and "无法识别" in got[ids[5]].pending_note
         assert not got[ids[4]].enabled and "无效" in got[ids[4]].pending_note
         assert db.scalar(select(ThermalCurve)).nodes == NODES
 
@@ -247,3 +249,50 @@ def test_redfish_only_policy_is_not_resent_every_cycle(app_factory, factory, ven
             db.commit()
         assert len(db.scalars(select(ControlOperation)).all()) == 1 and len(rf.patches) == 1
         assert "不调整" in db.scalar(select(ThermalPolicy)).last_decision
+
+
+def test_preset_policy_applies_once_and_fuse_still_wins(app_factory, factory) -> None:  # type: ignore[no-untyped-def]
+    from app.control.thermal import PRODUCTION_CATALOG
+    from tests.test_control_thermal import FakeThermalBmc, worker
+
+    with factory() as db:
+        set_owner(db, "new")
+        aid = _setup(db, app_factory.cipher, "preset")
+        p = db.scalar(select(ThermalPolicy))
+        p.preset_key = "turbo"
+        db.commit()
+        _temp(db, aid, 50.0)
+        assert run_policies(db, now=NOW, catalog=PRODUCTION_CATALOG)["requested"] == 1
+        db.commit()
+        op = db.scalar(select(ControlOperation))
+        assert (op.action, op.params) == ("set_speed_per_fan", {"preset": "turbo", "speeds": [80] * 6})
+    bmc = FakeThermalBmc()
+    worker(app_factory, factory, bmc, PRODUCTION_CATALOG).run_once()
+    assert len(bmc.writes) == 7
+    with factory() as db:
+        for i in range(1, 3):
+            at = NOW + timedelta(seconds=15 * i)
+            _temp(db, aid, 50.0, at)
+            assert run_policies(db, now=at, catalog=PRODUCTION_CATALOG)["requested"] == 0
+            db.commit()
+        assert "已是情景方案“满载散热”" in db.scalar(select(ThermalPolicy)).last_decision
+        at = NOW + timedelta(minutes=1)
+        _temp(db, aid, 85.0, at)  # 熔断优先于情景方案
+        assert run_policies(db, now=at, catalog=PRODUCTION_CATALOG)["requested"] == 1
+        db.commit()
+        last = db.scalars(select(ControlOperation).order_by(ControlOperation.created_at.desc())).first()
+        assert last.action == "restore_auto"
+
+
+def test_preset_policy_api(app_factory, factory) -> None:  # type: ignore[no-untyped-def]
+    add_user(factory, "olivia", "operator")
+    c = login(app_factory(), "olivia")
+    with factory() as db:
+        aid = make_asset(db, app_factory.cipher).id
+    listing = c.get("/api/control/thermal/policies").json()
+    assert {p["key"] for p in listing["presets"]} >= {"silent", "turbo"}
+    assert c.put(f"/api/control/thermal/policies/{aid}", json={"revision": 0, "mode": "preset", "enabled": False}).status_code == 422
+    r = c.put(f"/api/control/thermal/policies/{aid}", json={"revision": 0, "mode": "preset", "preset_key": "two_node_eco", "enabled": True})
+    assert r.status_code == 200 and (r.json()["mode"], r.json()["preset_key"]) == ("preset", "two_node_eco")
+    r = c.put(f"/api/control/thermal/policies/{aid}", json={"revision": 1, "mode": "fixed", "fixed_pwm": 40, "preset_key": "turbo", "enabled": True})
+    assert r.json()["preset_key"] == ""  # 换成其他模式时清掉

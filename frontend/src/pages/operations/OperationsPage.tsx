@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Dialog } from "radix-ui"
 
 import { PageHeader } from "@/components/AppShell"
@@ -14,6 +14,7 @@ import {
   type ControlAction,
   type ControlOperation,
   type ControlStatus,
+  type FanPreset,
   type PushSubscription,
   BMC_SNMP_ACTIONS,
   SNMP_NEEDS_CREDENTIAL,
@@ -22,6 +23,7 @@ import {
   THERMAL_MODE,
   confirmPhrase,
   newRequestKey,
+  parseSpeeds,
 } from "@/lib/control"
 import { dateText, usePoll } from "@/lib/monitor"
 import { cn } from "@/lib/utils"
@@ -376,7 +378,12 @@ export function Capability({ kind, assetId }: { kind: Kind; assetId: string }) {
       {kind === "thermal" && d.target ? (
         <p className="text-xs text-muted-foreground">
           温控模式：{THERMAL_MODE[d.target.thermal_mode] ?? d.target.thermal_mode}
-          {d.target.applied_pwm != null ? ` · ${d.target.applied_pwm}%` : ""}（“已下发”表示 BMC 接受了命令，不代表已确认生效）
+          {d.target.applied_speeds?.length
+            ? ` · ${d.target.applied_speeds.join(" / ")}%`
+            : d.target.applied_pwm != null
+              ? ` · ${d.target.applied_pwm}%`
+              : ""}
+          （“已下发”表示 BMC 接受了命令，不代表已确认生效）
         </p>
       ) : null}
       {/* 所有操作因同一原因不可执行时只说一次 */}
@@ -426,10 +433,19 @@ export function ConfirmDialog({
   const [pwm, setPwm] = useState("")
   const needsPwm = action.key === "set_speed_all"
   const pwmValue = /^\d{1,3}$/.test(pwm) ? Number(pwm) : null
+  const perFan = action.key === "set_speed_per_fan"
+  const [presets, setPresets] = useState<FanPreset[]>([])
+  useEffect(() => {
+    if (perFan) void api.get<FanPreset[]>("/api/control/thermal/presets").then(setPresets, () => setPresets([]))
+  }, [perFan])
+  const [preset, setPreset] = useState("")
+  const [speedsText, setSpeedsText] = useState("")
+  const speeds = perFan && !preset ? parseSpeeds(speedsText) : null
+  const perFanReady = !perFan || Boolean(preset) || speeds !== null
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
   const phrase = confirmPhrase(assets.map((a) => a.name))
-  const ready = (!action.high_risk || confirm.trim() === phrase) && (!needsPwm || (pwmValue !== null && pwmValue <= 100))
+  const ready = (!action.high_risk || confirm.trim() === phrase) && (!needsPwm || (pwmValue !== null && pwmValue <= 100)) && perFanReady
   async function submit() {
     if (busy || !ready) return
     setBusy(true)
@@ -439,6 +455,7 @@ export function ConfirmDialog({
         asset_ids: assets.map((a) => a.id),
         action: action.key,
         ...(needsPwm ? { pwm: pwmValue } : {}),
+        ...(perFan ? (preset ? { preset } : { speeds }) : {}),
         ...(extra ?? {}),
         confirm,
         reason,
@@ -459,7 +476,9 @@ export function ConfirmDialog({
           description={
             <>
               {kind === "thermal"
-                ? action.high_risk
+                ? perFan
+                  ? "每个风扇各自固定一个转速，BMC 停止按温度自动调速。只有部分机型支持（执行前读取设备型号匹配风扇命令，不支持的直接拒绝）；任何一个风扇低于安全下限，整组都不下发。"
+                  : action.high_risk
                   ? "固定转速会让 BMC 停止按温度自动调速，转速过低可能导致过热。执行前会读取设备型号匹配风扇命令；超时标为“结果不确定”，不会自动重试。"
                   : "恢复由 BMC 按温度自动调节风扇。通过 IPMI 下发的无法回读控制模式，结果会显示为“已接受，无法确认”；通过 Redfish 的会再读一次确认。"
                 : kind === "bmc-snmp"
@@ -499,6 +518,37 @@ export function ConfirmDialog({
               onChange={(e) => setPwm(e.target.value.trim())}
             />
           </LabeledField>
+        ) : null}
+        {perFan ? (
+          <div className="mt-3 space-y-3">
+            <LabeledField label="情景方案" help="ops.preset">
+              <select
+                data-help-wrapped=""
+                className="h-8 rounded-md border bg-card px-2 text-[0.8125rem] text-foreground"
+                value={preset}
+                onChange={(e) => setPreset(e.target.value)}
+              >
+                <option value="">自定义每个风扇的转速</option>
+                {presets.map((p) => (
+                  <option key={p.key} value={p.key}>
+                    {p.name}（{p.speeds.join(" / ")}%）
+                  </option>
+                ))}
+              </select>
+            </LabeledField>
+            {preset ? (
+              <p className="text-xs text-muted-foreground">{presets.find((p) => p.key === preset)?.desc}</p>
+            ) : (
+              <LabeledField label="每个风扇的转速 %" hint="按风扇编号顺序填写，用逗号或空格分开，例如 30, 40, 30" help="ops.speeds">
+                <input
+                  data-help-wrapped=""
+                  className="h-8 rounded-md border bg-card px-2 text-[0.8125rem] text-foreground"
+                  value={speedsText}
+                  onChange={(e) => setSpeedsText(e.target.value)}
+                />
+              </LabeledField>
+            )}
+          </div>
         ) : null}
         {action.high_risk ? (
           <LabeledField label={`请输入“${phrase}”确认`} help="ops.confirmPhrase" className="mt-3">

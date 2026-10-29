@@ -20,14 +20,14 @@ The Windows packages (MSI and portable ZIP) are **not** Authenticode-signed, so 
 | [GitHub CLI `gh`](https://cli.github.com/) | provenance attestations | 2.49 or newer; run `gh auth login` first |
 | `sha256sum` (Linux) or PowerShell `Get-FileHash` (Windows) | file checksums | built in |
 
-The examples use `4.4.0-beta.1`; substitute the version you downloaded.
+The examples use `4.4.0-beta.2`; substitute the version you downloaded.
 
 ## 1. Verify the image
 
 Look up the digest of the multi-arch index for the version tag (it is also printed at the end of the release notes):
 
 ```bash
-docker buildx imagetools inspect ghcr.io/kongbai9420/yunshu:4.4.0-beta.1
+docker buildx imagetools inspect ghcr.io/kongbai9420/yunshu:4.4.0-beta.2
 # "Digest: sha256:…" in the output is <digest>
 ```
 
@@ -48,7 +48,7 @@ gh attestation verify oci://ghcr.io/kongbai9420/yunshu@<digest> --repo kongbai94
   --predicate-type https://spdx.dev/Document/v2.3
 ```
 
-Once verified, consider deploying by digest rather than by tag, e.g. `image: ghcr.io/kongbai9420/yunshu:4.4.0-beta.1@sha256:…`, so a later tag move cannot swap your image.
+Once verified, consider deploying by digest rather than by tag, e.g. `image: ghcr.io/kongbai9420/yunshu:4.4.0-beta.2@sha256:…`, so a later tag move cannot swap your image.
 
 ## 2. Verify release files
 
@@ -85,32 +85,32 @@ Get-Content .\SHA256SUMS | ForEach-Object {
 }
 ```
 
-For a single file: `(Get-FileHash .\Yunshu-4.4.0-beta.1-windows-amd64.msi).Hash`, compared with the matching line in `SHA256SUMS` (case does not matter).
+For a single file: `(Get-FileHash .\Yunshu-4.4.0-beta.2-windows-amd64.msi).Hash`, compared with the matching line in `SHA256SUMS` (case does not matter).
 
 **Step 3 (optional): provenance**
 
 Each file can be verified on its own, without `SHA256SUMS`:
 
 ```bash
-gh attestation verify yunshu-4.4.0-beta.1-linux-amd64.tar.gz --repo kongbai9420/YunShu
-gh attestation verify Yunshu-4.4.0-beta.1-windows-amd64.msi --repo kongbai9420/YunShu
+gh attestation verify yunshu-4.4.0-beta.2-linux-amd64.tar.gz --repo kongbai9420/YunShu
+gh attestation verify Yunshu-4.4.0-beta.2-windows-amd64.msi --repo kongbai9420/YunShu
 ```
 
 Add `--signer-workflow kongbai9420/YunShu/.github/workflows/release.yml` to also pin the workflow that built it.
 
 ## 3. Offline image archives
 
-For networks that cannot reach the registry: `yunshu-4.4.0-beta.1-image-amd64.tar.gz` / `-arm64.tar.gz`. Pick the one matching the server (`uname -m`: `x86_64` → amd64, `aarch64` → arm64).
+For networks that cannot reach the registry: `yunshu-4.4.0-beta.2-image-amd64.tar.gz` / `-arm64.tar.gz`. Pick the one matching the server (`uname -m`: `x86_64` → amd64, `aarch64` → arm64).
 
 1. Check the checksum as in section 2 (or run `gh attestation verify`).
 2. Load it:
 
    ```bash
-   docker load -i yunshu-4.4.0-beta.1-image-amd64.tar.gz
-   # Loaded image: ghcr.io/kongbai9420/yunshu:4.4.0-beta.1
+   docker load -i yunshu-4.4.0-beta.2-image-amd64.tar.gz
+   # Loaded image: ghcr.io/kongbai9420/yunshu:4.4.0-beta.2
    ```
 
-3. Then follow the [deployment guide](README.en.md) with `image: ghcr.io/kongbai9420/yunshu:4.4.0-beta.1`; Docker uses the loaded local image and does not pull.
+3. Then follow the [deployment guide](README.en.md) with `image: ghcr.io/kongbai9420/yunshu:4.4.0-beta.2`; Docker uses the loaded local image and does not pull.
 
 The pipeline produces each archive by pulling that architecture from the signed multi-arch image by digest and running `docker save`, so the content is the same as the online image. Its SBOM is the `.spdx.json` file with the same name.
 

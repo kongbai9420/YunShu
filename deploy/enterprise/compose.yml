@@ -3,7 +3,7 @@
 # 执行 Worker 数量按资产规模调整：docker compose up -d --scale executor=N。
 # 主密钥卷建议改为宿主目录或密钥管理系统挂载，并纳入单独的备份流程。
 x-yunshu: &yunshu
-  image: ${YUNSHU_IMAGE:-ghcr.io/kongbai9420/yunshu:4.4.0-beta.1}
+  image: ${YUNSHU_IMAGE:-ghcr.io/kongbai9420/yunshu:4.4.0-beta.2}
   volumes:
     - yunshu-data:/data
     - yunshu-keys:/etc/yunshu

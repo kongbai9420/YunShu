@@ -143,6 +143,33 @@ test("温控策略：编辑曲线带修订号，为服务器添加并启用策�
   await expect(page.getByRole("listitem", { name: "温控样本甲 的温控策略" })).toContainText("没有可用的 CPU 温度", { timeout: 30000 })
 })
 
+test("情景方案：按风扇设定转速，策略选用同一方案后不再重复下发", async ({ page }) => {
+  await login(page)
+  await page.goto("/#/operations")
+  await page.getByRole("button", { name: "风扇与温控", exact: true }).click()
+  await page.getByLabel("搜索资产").fill("温控样本甲")
+  await page.getByRole("button", { name: "搜索", exact: true }).click()
+  await page.getByLabel("温控样本甲", { exact: true }).check()
+  await page.getByRole("button", { name: "按风扇设定转速", exact: true }).click()
+  const dialog = page.getByRole("dialog")
+  // 自定义：填错时不能提交
+  await dialog.getByLabel("每个风扇的转速 %").fill("30, abc")
+  await dialog.getByLabel("请输入“温控样本甲”确认").fill("温控样本甲")
+  await expect(dialog.getByRole("button", { name: "确认按风扇设定转速" })).toBeDisabled()
+  await dialog.getByLabel("情景方案").selectOption({ label: "满载散热（80 / 80 / 80 / 80 / 80 / 80%）" })
+  await dialog.getByRole("button", { name: "确认按风扇设定转速" }).click()
+  await expect(page.locator("section").filter({ hasText: "本次操作结果" }).getByText("已接受，无法确认")).toBeVisible()
+  await page.getByRole("listitem").filter({ hasText: "温控样本甲" }).getByRole("button", { name: "查看能力" }).click()
+  await expect(page.getByText("按风扇设定（已下发） · 80 / 80 / 80 / 80 / 80 / 80%")).toBeVisible()
+
+  await page.getByRole("button", { name: "温控策略", exact: true }).click()
+  const row = page.getByRole("listitem", { name: "温控样本甲 的温控策略" })
+  await row.getByLabel("模式").selectOption("preset")
+  await row.getByLabel("情景方案").selectOption("turbo")
+  await row.getByRole("button", { name: "保存策略" }).click()
+  await expect(page.getByRole("listitem", { name: "温控样本甲 的温控策略" })).toContainText("已是情景方案“满载散热”", { timeout: 30000 })
+})
+
 test("风扇命令：管理员添加自定义命令后，原先匹配不到的设备可以下发", async ({ page }) => {
   await login(page)
   await page.goto("/#/operations")
@@ -153,7 +180,7 @@ test("风扇命令：管理员添加自定义命令后，原先匹配不到的�
   await form.getByLabel("名称").fill("其他厂商（自测）")
   await form.getByLabel("厂商").fill("Other Vendor")
   await form.getByLabel("恢复原厂温控的命令").fill("0x00 0x02 0x00")
-  await form.getByLabel("设定转速的命令").fill("0x3a 0x07 0xff {pwm} 0x01")
+  await form.getByLabel("设定转速的命令", { exact: true }).fill("0x3a 0x07 0xff {pwm} 0x01")
   await form.getByRole("button", { name: "保存" }).click()
   await expect(form.getByRole("alert")).toContainText("OEM 段")
   await form.getByLabel("恢复原厂温控的命令").fill("0x3a 0x07 0xff 0x00 0x00")

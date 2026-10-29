@@ -2,7 +2,7 @@
 # 准备：cp .env.example .env，改掉 POSTGRES_PASSWORD；然后 docker compose up -d。
 # 升级版本：改镜像标签后 docker compose up -d，migrate 服务先完成结构升级，API / Worker 再启动（标准档启动时只检查版本）。
 x-yunshu: &yunshu
-  image: ${YUNSHU_IMAGE:-ghcr.io/kongbai9420/yunshu:4.4.0-beta.1}
+  image: ${YUNSHU_IMAGE:-ghcr.io/kongbai9420/yunshu:4.4.0-beta.2}
   volumes:
     - yunshu-data:/data
     - yunshu-keys:/etc/yunshu

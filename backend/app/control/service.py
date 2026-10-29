@@ -37,7 +37,7 @@ from app.control.guest import default_factory as default_guest_factory
 from app.control.power import ACTIONS, PowerClientFactory, PyghmiPowerClient, execute_power
 from app.control.thermal import (
     OPERATION_LABEL, PRODUCTION_CATALOG, GateDenied, PyghmiThermalClient, RedfishClientFactory, ThermalClientFactory, ThermalOperation,
-    ThermalProfile, custom_profile, default_redfish_factory, execute_thermal, validate_pwm,
+    PRESETS, ThermalProfile, custom_profile, default_redfish_factory, execute_thermal, preset_speeds, validate_pwm, validate_speeds,
 )
 from app.crypto import CredentialCipher
 from app.models import (
@@ -321,12 +321,44 @@ def thermal_params(action: str, params: dict[str, Any]) -> tuple[ThermalOperatio
         op = ThermalOperation(action)
     except ValueError as exc:
         raise Rejected("unknown_action", f"不支持的温控操作：{action}") from exc
-    if op != ThermalOperation.SET_SPEED_ALL:
-        return op, None
     try:
+        if op == ThermalOperation.SET_SPEED_PER_FAN:
+            validate_speeds(params.get("speeds"))
+            return op, None
+        if op != ThermalOperation.SET_SPEED_ALL:
+            return op, None
         return op, validate_pwm(params.get("pwm"))
     except GateDenied as exc:
         raise Rejected(exc.code, str(exc)) from exc
+
+
+def thermal_request(action: str, params: dict[str, Any]) -> tuple[ThermalOperation, dict[str, Any], str]:
+    """把请求整理成要保存的参数和显示用的名称。情景方案在这里换成每个风扇的转速，执行时不再查表。"""
+    try:
+        op = ThermalOperation(action)
+    except ValueError as exc:
+        raise Rejected("unknown_action", f"不支持的温控操作：{action}") from exc
+    clean: dict[str, Any] = {}
+    try:
+        if op == ThermalOperation.SET_SPEED_PER_FAN and params.get("preset"):
+            key = str(params["preset"])
+            clean = {"preset": key, "speeds": preset_speeds(key)}
+        elif op == ThermalOperation.SET_SPEED_PER_FAN:
+            clean = {"speeds": validate_speeds(params.get("speeds"))}
+        elif op == ThermalOperation.SET_SPEED_ALL:
+            clean = {"pwm": validate_pwm(params.get("pwm"))}
+    except GateDenied as exc:
+        raise Rejected(exc.code, str(exc)) from exc
+    return op, clean, thermal_label(op, clean)
+
+
+def thermal_label(op: ThermalOperation, params: dict[str, Any]) -> str:
+    label = OPERATION_LABEL[op]
+    if params.get("preset") in PRESETS:
+        return f"{label}（情景方案“{PRESETS[params['preset']]['name']}”）"
+    if params.get("speeds"):
+        return f"{label} {'/'.join(str(v) for v in params['speeds'])}%"
+    return label + (f" {params['pwm']}%" if params.get("pwm") is not None else "")
 
 
 def thermal_endpoints(asset: Asset) -> list[ManagementEndpoint]:
@@ -403,6 +435,7 @@ def _target_out(db: Session, asset: Asset, ep: ManagementEndpoint | None = None)
         "target": {
             "key": key, "state": t.state if t else "ok", "message": t.message if t else "",
             "thermal_mode": t.thermal_mode if t else "unknown", "applied_pwm": t.applied_pwm if t else None,
+            "applied_speeds": t.applied_speeds if t else None,
             "thermal_updated_at": t.thermal_updated_at.isoformat() if t and t.thermal_updated_at else None,
         } if key else None,
     }
@@ -415,16 +448,19 @@ def describe_power(db: Session, asset: Asset) -> dict[str, Any]:
 
 
 THERMAL_ACTIONS = [(ThermalOperation.RESTORE_AUTO.value, OPERATION_LABEL[ThermalOperation.RESTORE_AUTO], False),
-                   (ThermalOperation.SET_SPEED_ALL.value, OPERATION_LABEL[ThermalOperation.SET_SPEED_ALL], True)]
+                   (ThermalOperation.SET_SPEED_ALL.value, OPERATION_LABEL[ThermalOperation.SET_SPEED_ALL], True),
+                   (ThermalOperation.SET_SPEED_PER_FAN.value, OPERATION_LABEL[ThermalOperation.SET_SPEED_PER_FAN], True)]
 
 
 def describe_thermal(db: Session, asset: Asset, catalog: tuple[ThermalProfile, ...]) -> dict[str, Any]:
-    probe = {ThermalOperation.SET_SPEED_ALL.value: {"pwm": 100}}
+    probe = {ThermalOperation.SET_SPEED_ALL.value: {"pwm": 100}, ThermalOperation.SET_SPEED_PER_FAN.value: {"speeds": [100]}}
     return {
         **_target_out(db, asset, next(iter(thermal_endpoints(asset)), None)), "catalog_size": len(thermal_catalog(db, catalog)),
         "actions": _actions_out(THERMAL_ACTIONS, lambda k: thermal_gate(db, asset, k, probe.get(k, {}), catalog=catalog)),
         "note": "执行时先读取设备的厂商、型号与 BMC 固件，再在风扇命令库里匹配要用的命令；资产上填写的品牌型号不作为依据。"
-                "内置命令大多整理自厂商文档与社区资料，未经本项目实机验证，请先在非生产设备上试用。",
+                "内置命令大多整理自厂商文档与社区资料，未经本项目实机验证，请先在非生产设备上试用。"
+                "按风扇设定转速（含情景方案）只有部分机型支持，执行时识别后才知道。",
+        "presets": [{"key": k, "name": v["name"], "desc": v["desc"], "speeds": v["speeds"]} for k, v in PRESETS.items()],
     }
 
 
@@ -436,10 +472,9 @@ def action_label(op: ControlOperation) -> str:
         return ACTIONS[op.action].label
     if op.kind == "thermal":
         try:
-            label = OPERATION_LABEL[ThermalOperation(op.action)]
+            return thermal_label(ThermalOperation(op.action), op.params or {})
         except ValueError:
             return op.action
-        return label + (f" {op.params['pwm']}%" if op.params.get("pwm") is not None else "")
     if op.kind == "bmc_snmp" and op.action in SNMP_ACTIONS:
         return SNMP_ACTIONS[op.action].label
     return op.action
@@ -604,11 +639,9 @@ def request_thermal(
     db: Session, actor: User, asset_ids: list[uuid.UUID], action: str, params: dict[str, Any], *, confirm: str, reason: str,
     request_key: str, catalog: tuple[ThermalProfile, ...] = PRODUCTION_CATALOG,
 ) -> dict[str, Any]:
-    op, pwm = thermal_params(action, params)
-    clean = {"pwm": pwm} if pwm is not None else {}
-    label = OPERATION_LABEL[op] + (f" {pwm}%" if pwm is not None else "")
+    op, clean, label = thermal_request(action, params)
     return _request(db, actor, asset_ids, kind="thermal", task=THERMAL_TASK, action=op.value, params=clean, label=label,
-                    high_risk=op == ThermalOperation.SET_SPEED_ALL, confirm=confirm, reason=reason, request_key=request_key,
+                    high_risk=op != ThermalOperation.RESTORE_AUTO, confirm=confirm, reason=reason, request_key=request_key,
                     gate=lambda a: thermal_gate(db, a, op.value, clean, catalog=catalog))
 
 
@@ -633,9 +666,7 @@ def request_thermal_system(
     catalog: tuple[ThermalProfile, ...] = PRODUCTION_CATALOG,
 ) -> dict[str, Any]:
     """温控策略（曲线、熔断）发起的下发：与人工请求同样经过门禁、互斥、任务与审计。"""
-    op, pwm = thermal_params(action, params)
-    clean = {"pwm": pwm} if pwm is not None else {}
-    label = OPERATION_LABEL[op] + (f" {pwm}%" if pwm is not None else "")
+    op, clean, label = thermal_request(action, params)
     return _request(db, None, [asset_id], kind="thermal", task=THERMAL_TASK, action=op.value, params=clean, label=label,
                     high_risk=False, confirm="", reason=reason, request_key=request_key, system_name=SYSTEM_POLICY,
                     gate=lambda a: thermal_gate(db, a, op.value, clean, catalog=catalog))
@@ -658,9 +689,10 @@ class RunResult:
     status: str
     message: str
     observed: dict[str, Any] = field(default_factory=dict)
-    # 设备接受了温控命令后的模式：auto / manual；None 表示不改（失败、不确定时由 _finish 记为未知）
+    # 设备接受了温控命令后的模式：auto / manual / per_fan；None 表示不改（失败、不确定时由 _finish 记为未知）
     thermal_mode: str | None = None
     applied_pwm: int | None = None
+    applied_speeds: list[int] | None = None
 
 
 def _finish(db: Session, op: ControlOperation, r: RunResult) -> None:
@@ -676,8 +708,10 @@ def _finish(db: Session, op: ControlOperation, r: RunResult) -> None:
             # 只有设备接受了命令才推进“已下发”状态；失败或不确定时模式记为未知，不保留旧值冒充
             if r.thermal_mode is not None:
                 target.thermal_mode, target.applied_pwm, target.thermal_updated_at = r.thermal_mode, r.applied_pwm, now_utc()
+                target.applied_speeds = r.applied_speeds if r.thermal_mode == "per_fan" else None
             elif r.status in ("failed", "indeterminate"):
                 target.thermal_mode, target.applied_pwm, target.thermal_updated_at = "unknown", None, now_utc()
+                target.applied_speeds = None
     audit.record(
         db, None, f"control.{op.kind}.result", target_type="asset", target_id=op.asset_id or "",
         summary=f"{action_label(op)}（{op.requested_by} 请求）：{r.status} — {r.message[:200]}",
@@ -957,8 +991,9 @@ def make_thermal_handler(
         if isinstance(g, ThermalGate) and g.alt is not None and g.alt_ctx is not None:
             ctxs[g.alt.protocol] = g.alt_ctx
         out = execute_thermal(ctxs, top, pwm, catalog=g.catalog if isinstance(g, ThermalGate) else catalog, factory=factory,
-                              redfish_factory=redfish_factory or default_redfish_factory, drivers=drivers)
-        return RunResult(out.status, out.message, out.observed, thermal_mode=out.mode, applied_pwm=out.pwm)
+                              redfish_factory=redfish_factory or default_redfish_factory, drivers=drivers,
+                              speeds=op.params.get("speeds") if top == ThermalOperation.SET_SPEED_PER_FAN else None)
+        return RunResult(out.status, out.message, out.observed, thermal_mode=out.mode, applied_pwm=out.pwm, applied_speeds=out.speeds)
 
     gate: GateCheck = lambda db, a, op: thermal_gate(db, a, op.action, op.params, catalog=catalog, operation_id=op.id)  # noqa: E731
     return _make_handler(cipher_factory, gate, run)

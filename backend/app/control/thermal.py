@@ -24,10 +24,26 @@ from app.control.base import ControlError
 class ThermalOperation(str, Enum):
     RESTORE_AUTO = "restore_auto"
     SET_SPEED_ALL = "set_speed_all"
+    SET_SPEED_PER_FAN = "set_speed_per_fan"
 
 
-OPERATION_LABEL = {ThermalOperation.RESTORE_AUTO: "恢复原厂自动温控", ThermalOperation.SET_SPEED_ALL: "全局固定转速"}
+OPERATION_LABEL = {ThermalOperation.RESTORE_AUTO: "恢复原厂自动温控", ThermalOperation.SET_SPEED_ALL: "全局固定转速",
+                   ThermalOperation.SET_SPEED_PER_FAN: "按风扇设定转速"}
 BOTH = frozenset({ThermalOperation.RESTORE_AUTO, ThermalOperation.SET_SPEED_ALL})
+WITH_PER_FAN = BOTH | {ThermalOperation.SET_SPEED_PER_FAN}
+MAX_FANS = 16
+
+# 情景方案：每个风扇各自的转速（与旧版相同的六个方案；静音由 15% 提高到 20%，不低于内置命令的安全下限）。
+# 风扇按 BMC 的编号顺序排列（第 1 个对应编号 0）；风扇数量与设备不一致时，多出来的不下发、缺的保持原样。
+PRESETS: dict[str, dict[str, Any]] = {
+    "silent": {"name": "静音", "desc": "所有风扇 20%，适合低负载的家庭、办公环境", "speeds": [20, 20, 20, 20, 20, 20]},
+    "one_node_l": {"name": "单节点负载（左）", "desc": "左侧节点增强散热，适合单 CPU 或左侧 PCIe 高负载", "speeds": [25, 40, 30, 25, 20, 20]},
+    "one_node_r": {"name": "单节点负载（右）", "desc": "右侧节点增强散热，适合右侧 PCIe 或单 CPU 高负载", "speeds": [20, 20, 25, 30, 40, 25]},
+    "two_node_eco": {"name": "双节点节能", "desc": "双路 CPU 均衡轻载，噪音与风量平衡", "speeds": [20, 23, 20, 20, 23, 20]},
+    "two_node_perf": {"name": "双节点高性能", "desc": "双路 CPU 高性能（125W 以上）、渲染或编译", "speeds": [25, 40, 30, 30, 40, 25]},
+    "turbo": {"name": "满载散热", "desc": "所有风扇 80%，适合高负载、高温环境", "speeds": [80, 80, 80, 80, 80, 80]},
+}
+LEGACY_PRESET_ALIASES = {"quiet": "silent"}
 
 
 class EvidenceSource(str, Enum):
@@ -60,6 +76,7 @@ def _version_tuple(v: str) -> tuple[int, ...] | None:
 
 
 PWM = "pwm"  # 命令数据里的转速占位
+FAN = "fan"  # 命令数据里的风扇编号占位（按风扇设定时每个风扇发一次）
 
 
 @dataclass(frozen=True)
@@ -68,11 +85,12 @@ class RawStep:
     command: int
     data: tuple[int | str, ...]
 
-    def bytes_for(self, value: int) -> list[int]:
-        return [value if b == PWM else int(b) for b in self.data]
+    def bytes_for(self, value: int, fan: int = 0) -> list[int]:
+        return [value if b == PWM else fan if b == FAN else int(b) for b in self.data]
 
     def text(self) -> str:
-        return " ".join([f"0x{self.netfn:02x}", f"0x{self.command:02x}", *("{pwm}" if b == PWM else f"0x{int(b):02x}" for b in self.data)])
+        return " ".join([f"0x{self.netfn:02x}", f"0x{self.command:02x}",
+                         *("{pwm}" if b == PWM else "{fan}" if b == FAN else f"0x{int(b):02x}" for b in self.data)])
 
 
 @dataclass(frozen=True)
@@ -92,6 +110,8 @@ class ThermalProfile:
     vendor_aliases: tuple[str, ...] = ()
     restore_steps: tuple[RawStep, ...] = ()
     set_steps: tuple[RawStep, ...] = ()
+    # 按风扇设定转速：含 {fan} 的命令按风扇逐个发送（{fan} 为 BMC 的风扇编号，从 0 开始），其余命令按顺序发一次
+    fan_steps: tuple[RawStep, ...] = ()
     pwm_scale: str = "percent"  # percent：0–100；byte：0–255
     description: str = ""
 
@@ -116,7 +136,8 @@ class ThermalProfile:
 
 def _step(text: str) -> RawStep:
     parts = text.split()
-    return RawStep(int(parts[0], 16), int(parts[1], 16), tuple(PWM if p == "{pwm}" else int(p, 16) for p in parts[2:]))
+    return RawStep(int(parts[0], 16), int(parts[1], 16),
+                   tuple(PWM if p == "{pwm}" else FAN if p == "{fan}" else int(p, 16) for p in parts[2:]))
 
 
 COMMUNITY = Evidence(EvidenceSource.COMMUNITY)
@@ -126,11 +147,13 @@ COMMUNITY = Evidence(EvidenceSource.COMMUNITY)
 PRODUCTION_CATALOG: tuple[ThermalProfile, ...] = (
     ThermalProfile(
         profile_id="dell-idrac-ipmi", label="Dell iDRAC 7 / 8 / 9（固件 3.30.30.30 及以前）", vendor="dell",
-        model_patterns=(r".*",), firmware_min="", firmware_max="3.30.30.30", driver_id="ipmi_raw_v1", operations=BOTH,
+        model_patterns=(r".*",), firmware_min="", firmware_max="3.30.30.30", driver_id="ipmi_raw_v1", operations=WITH_PER_FAN,
         safe_min_pwm=20, safe_max_pwm=100, evidence=COMMUNITY,
         restore_steps=(_step("0x30 0x30 0x01 0x01"),),
         set_steps=(_step("0x30 0x30 0x01 0x00"), _step("0x30 0x30 0x02 0xff {pwm}")),
-        description="Dell 的 OEM 命令：先切到手动，再设定全部风扇的转速百分比。iDRAC9 3.34.34.34 起 Dell 移除了这组命令，改用下面的 Redfish 方式。",
+        fan_steps=(_step("0x30 0x30 0x01 0x00"), _step("0x30 0x30 0x02 {fan} {pwm}")),
+        description="Dell 的 OEM 命令：先切到手动，再设定全部风扇（0xff）或单个风扇的转速百分比。"
+                    "iDRAC9 3.34.34.34 起 Dell 移除了这组命令，改用下面的 Redfish 方式。",
     ),
     ThermalProfile(
         profile_id="dell-idrac9-redfish", label="Dell iDRAC9（固件 3.34.34.34 起）", vendor="dell",
@@ -146,14 +169,15 @@ PRODUCTION_CATALOG: tuple[ThermalProfile, ...] = (
         restore_steps=(_step("0x30 0x45 0x01 0x02"),),
         set_steps=(_step("0x30 0x45 0x01 0x01"), _step("0x30 0x70 0x66 0x01 0x00 {pwm}"), _step("0x30 0x70 0x66 0x01 0x01 {pwm}")),
         description="先把风扇模式设为 Full（BMC 不再调速），再分别设定 CPU 区（0）和外设区（1）的占空比（0–100）。"
-                    "恢复原厂温控设为 Optimal 模式。X9 主板占空比的刻度不同，不在此列。",
+                    "恢复原厂温控设为 Optimal 模式。只能按区设定，不支持按风扇设定。X9 主板占空比的刻度不同，不在此列。",
     ),
     ThermalProfile(
         profile_id="huawei-ibmc-redfish", label="华为 / 超聚变 iBMC", vendor="huawei", vendor_aliases=("xfusion",),
-        model_patterns=(r".*",), firmware_min="", firmware_max="", driver_id="huawei_redfish_fan_v1", operations=BOTH,
+        model_patterns=(r".*",), firmware_min="", firmware_max="", driver_id="huawei_redfish_fan_v1", operations=WITH_PER_FAN,
         safe_min_pwm=20, safe_max_pwm=100, evidence=COMMUNITY, transport="redfish",
         description="通过 Redfish 修改机箱 Thermal 资源 Oem 里的 FanSpeedAdjustmentMode（Manual / Automatic）和 FanSpeedLevelPercents。"
-                    "旧机型的 IPMI 风扇命令在部分固件上会返回错误，所以只用 Redfish。BMC 重启或服务器下电后会自动回到自动模式。",
+                    "旧机型的 IPMI 风扇命令在部分固件上会返回错误，所以只用 Redfish。BMC 重启或服务器下电后会自动回到自动模式。"
+                    "设备按风扇报告转速（数组）时才能按风扇设定。",
     ),
     ThermalProfile(
         profile_id="hpe-ilo-redfish", label="HPE iLO 5 / 6", vendor="hpe", vendor_aliases=("hp",),
@@ -206,16 +230,39 @@ def match_profile(catalog: tuple[ThermalProfile, ...], identity: Identity) -> Th
     return p
 
 
-def check_operation(profile: ThermalProfile, op: ThermalOperation, pwm: int | None) -> None:
+def check_operation(profile: ThermalProfile, op: ThermalOperation, pwm: int | None, speeds: list[int] | None = None) -> None:
     if op not in profile.operations:
-        raise GateDenied("operation_unauthorized", f"风扇命令 {profile.profile_id} 不支持“{OPERATION_LABEL[op]}”")
+        raise GateDenied("operation_unauthorized", f"“{profile.label or profile.profile_id}”的风扇命令不支持“{OPERATION_LABEL[op]}”")
     if op == ThermalOperation.SET_SPEED_ALL:
         if pwm is None:
             raise GateDenied("pwm_missing", "缺少目标转速")
-        if pwm < profile.safe_min_pwm:
-            raise GateDenied("pwm_below_safe", f"目标转速 {pwm}% 低于该机型的安全下限 {profile.safe_min_pwm}%，拒绝执行（不会自动改成下限）")
-        if pwm > profile.safe_max_pwm:
-            raise GateDenied("pwm_above_safe", f"目标转速 {pwm}% 高于该机型允许的上限 {profile.safe_max_pwm}%，拒绝执行")
+        _check_range(profile, pwm, "目标转速")
+    if op == ThermalOperation.SET_SPEED_PER_FAN:
+        if not speeds:
+            raise GateDenied("pwm_missing", "缺少每个风扇的转速")
+        for i, v in enumerate(speeds, 1):
+            _check_range(profile, v, f"风扇 {i} 的转速")
+
+
+def _check_range(profile: ThermalProfile, pwm: int, what: str) -> None:
+    if pwm < profile.safe_min_pwm:
+        raise GateDenied("pwm_below_safe", f"{what} {pwm}% 低于该机型的安全下限 {profile.safe_min_pwm}%，拒绝执行（不会自动改成下限）")
+    if pwm > profile.safe_max_pwm:
+        raise GateDenied("pwm_above_safe", f"{what} {pwm}% 高于该机型允许的上限 {profile.safe_max_pwm}%，拒绝执行")
+
+
+def validate_speeds(value: Any) -> list[int]:
+    """按风扇设定的转速：1–16 个 0–100 的整数，不截断。"""
+    if not isinstance(value, list) or not 1 <= len(value) <= MAX_FANS:
+        raise GateDenied("pwm_invalid", f"每个风扇的转速要写成 1 到 {MAX_FANS} 个数")
+    return [validate_pwm(v) for v in value]
+
+
+def preset_speeds(key: str) -> list[int]:
+    key = LEGACY_PRESET_ALIASES.get(key, key)
+    if key not in PRESETS:
+        raise GateDenied("preset_unknown", f"情景方案“{key}”不存在")
+    return list(PRESETS[key]["speeds"])
 
 
 def validate_pwm(value: Any) -> int:
@@ -235,8 +282,11 @@ MAX_STEPS = 6
 MAX_DATA = 32
 
 
-def parse_commands(text: str, *, needs_pwm: bool) -> tuple[RawStep, ...]:
-    """每行一条，写法同 ipmitool raw：netfn command data...，数字可写 0x1f 或 31，{pwm} 为转速占位。"""
+def parse_commands(text: str, *, needs_pwm: bool, per_fan: bool = False) -> tuple[RawStep, ...]:
+    """每行一条，写法同 ipmitool raw：netfn command data...，数字可写 0x1f 或 31，{pwm} 为转速占位。
+
+    per_fan 为真时是“按风扇设定”的命令：至少一行同时含 {fan}（风扇编号，从 0 开始）和 {pwm}，这些行按风扇逐个发送。
+    """
     lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip() and not ln.strip().startswith("#")]
     if not lines:
         raise ValueError("至少要有一条命令")
@@ -254,6 +304,11 @@ def parse_commands(text: str, *, needs_pwm: bool) -> tuple[RawStep, ...]:
             if p.lower() == "{pwm}":
                 values.append(PWM)
                 continue
+            if p.lower() == "{fan}":
+                if not per_fan:
+                    raise ValueError(f"第 {n} 行：{{fan}} 只能用在“按风扇设定转速”的命令里")
+                values.append(FAN)
+                continue
             try:
                 v = int(p, 16) if p.lower().startswith("0x") else int(p)
             except ValueError as exc:
@@ -261,14 +316,18 @@ def parse_commands(text: str, *, needs_pwm: bool) -> tuple[RawStep, ...]:
             if not 0 <= v <= 0xFF:
                 raise ValueError(f"第 {n} 行的“{p}”超出一个字节（0–255）")
             values.append(v)
-        if values[0] == PWM or values[1] == PWM:
-            raise ValueError(f"第 {n} 行：{{pwm}} 只能出现在数据部分")
+        if values[0] in (PWM, FAN) or values[1] in (PWM, FAN):
+            raise ValueError(f"第 {n} 行：{{pwm}}、{{fan}} 只能出现在数据部分")
         if int(values[0]) not in CUSTOM_NETFN:
             raise ValueError(f"第 {n} 行：netfn 0x{int(values[0]):02x} 不允许，风扇命令只能用 OEM 段 0x2c–0x3f")
         if len(values) - 2 > MAX_DATA:
             raise ValueError(f"第 {n} 行数据超过 {MAX_DATA} 个字节")
         steps.append(RawStep(int(values[0]), int(values[1]), tuple(values[2:])))
     has_pwm = any(PWM in s.data for s in steps)
+    if per_fan:
+        if not any(FAN in s.data and PWM in s.data for s in steps):
+            raise ValueError("按风扇设定的命令里至少要有一行同时含 {fan} 和 {pwm}")
+        return tuple(steps)
     if needs_pwm and not has_pwm:
         raise ValueError("设定转速的命令里要有 {pwm}")
     if not needs_pwm and has_pwm:
@@ -281,9 +340,12 @@ def custom_profile(row: Any) -> ThermalProfile:
     return ThermalProfile(
         profile_id=f"custom:{row.id}", label=row.name, vendor=row.vendor.strip().lower(),
         model_patterns=(row.model_pattern.strip() or ".*",), firmware_min=row.firmware_min.strip(), firmware_max=row.firmware_max.strip(),
-        driver_id="ipmi_raw_v1", operations=BOTH, safe_min_pwm=row.safe_min_pwm, safe_max_pwm=row.safe_max_pwm,
+        driver_id="ipmi_raw_v1", operations=WITH_PER_FAN if (row.fan_commands or "").strip() else BOTH,
+        safe_min_pwm=row.safe_min_pwm, safe_max_pwm=row.safe_max_pwm,
         evidence=Evidence(EvidenceSource.CUSTOM, note=row.note), restore_steps=parse_commands(row.restore_commands, needs_pwm=False),
-        set_steps=parse_commands(row.set_commands, needs_pwm=True), pwm_scale=row.pwm_scale, description=row.note,
+        set_steps=parse_commands(row.set_commands, needs_pwm=True),
+        fan_steps=parse_commands(row.fan_commands, needs_pwm=True, per_fan=True) if (row.fan_commands or "").strip() else (),
+        pwm_scale=row.pwm_scale, description=row.note,
     )
 
 
@@ -391,28 +453,41 @@ def redfish_identity(c: RedfishClient) -> Identity:
 class DriverResult:
     steps: list[str] = field(default_factory=list)
     verified: bool = False
-    mode: str = ""  # auto / manual；空表示按操作推断
+    mode: str = ""  # auto / manual / per_fan；空表示按操作推断
     pwm: int | None = None
     note: str = ""
+    speeds: list[int] | None = None
+
+
+def _per_fan_unsupported(profile: ThermalProfile) -> GateDenied:
+    return GateDenied("operation_unauthorized", f"“{profile.label or profile.profile_id}”不支持按风扇设定转速")
 
 
 class IpmiRawDriver:
     """按命令库里的 raw 命令逐条发送。第一条之后失败时设备可能停在手动模式，提示恢复。"""
 
-    def run(self, client: ThermalClient, profile: ThermalProfile, op: ThermalOperation, pwm: int | None) -> DriverResult:
-        steps = profile.restore_steps if op == ThermalOperation.RESTORE_AUTO else profile.set_steps
+    def run(self, client: ThermalClient, profile: ThermalProfile, op: ThermalOperation, pwm: int | None,
+            speeds: list[int] | None = None) -> DriverResult:
+        steps = {ThermalOperation.RESTORE_AUTO: profile.restore_steps, ThermalOperation.SET_SPEED_ALL: profile.set_steps,
+                 ThermalOperation.SET_SPEED_PER_FAN: profile.fan_steps}[op]
         if not steps:
             raise GateDenied("operation_unauthorized", f"风扇命令 {profile.profile_id} 没有“{OPERATION_LABEL[op]}”的命令")
-        value = profile.device_pwm(pwm or 0)
-        r = DriverResult(pwm=pwm)
-        for i, s in enumerate(steps):
+        # 逐条展开：含 {fan} 的命令按风扇各发一次，其余命令发一次
+        sends: list[tuple[RawStep, int, int]] = []
+        for s in steps:
+            if FAN in s.data:
+                sends.extend((s, profile.device_pwm(v), fan) for fan, v in enumerate(speeds or []))
+            else:
+                sends.append((s, profile.device_pwm(pwm or 0), 0))
+        r = DriverResult(pwm=max(speeds) if op == ThermalOperation.SET_SPEED_PER_FAN and speeds else pwm, speeds=speeds)
+        for i, (s, value, fan) in enumerate(sends):
             try:
-                client.raw(s.netfn, s.command, s.bytes_for(value))
+                client.raw(s.netfn, s.command, s.bytes_for(value, fan))
             except ControlError as exc:
                 if i == 0:
                     raise
                 raise ControlError(exc.kind, f"前 {i} 条命令已执行，第 {i + 1} 条失败：{exc}。设备可能停在手动模式，请恢复原厂自动温控") from exc
-            r.steps.append(s.text().replace("{pwm}", str(value)))
+            r.steps.append(s.text().replace("{pwm}", str(value)).replace("{fan}", f"0x{fan:02x}"))
         return r
 
 
@@ -441,7 +516,10 @@ def _int(v: Any) -> int | None:
 
 
 class DellRedfishMinFanDriver:
-    def run(self, c: RedfishClient, profile: ThermalProfile, op: ThermalOperation, pwm: int | None) -> DriverResult:
+    def run(self, c: RedfishClient, profile: ThermalProfile, op: ThermalOperation, pwm: int | None,
+            speeds: list[int] | None = None) -> DriverResult:
+        if op == ThermalOperation.SET_SPEED_PER_FAN:
+            raise _per_fan_unsupported(profile)
         for path in DELL_ATTRIBUTE_PATHS:
             data, etag = c.get(path)
             attrs = data.get("Attributes") or {}
@@ -477,21 +555,33 @@ HUAWEI_MANUAL_TIMEOUT = 100_000_000
 
 
 class HuaweiRedfishFanDriver:
-    def run(self, c: RedfishClient, profile: ThermalProfile, op: ThermalOperation, pwm: int | None) -> DriverResult:
+    def run(self, c: RedfishClient, profile: ThermalProfile, op: ThermalOperation, pwm: int | None,
+            speeds: list[int] | None = None) -> DriverResult:
         path, thermal, etag = _thermal_resource(c)
         oem = thermal.get("Oem") or {}
         key = next((k for k, v in oem.items() if isinstance(v, dict) and "FanSpeedAdjustmentMode" in v), None)
         if key is None:
             raise GateDenied("unsupported", "这台 BMC 的 Redfish 没有手动风扇设置（Oem.FanSpeedAdjustmentMode）")
+        current = oem[key].get("FanSpeedLevelPercents")
+        per_fan = isinstance(current, list) and bool(current)
+        applied: list[int] | None = None
         if op == ThermalOperation.RESTORE_AUTO:
             body: dict[str, Any] = {"FanSpeedAdjustmentMode": "Automatic"}
+        elif op == ThermalOperation.SET_SPEED_PER_FAN:
+            if not per_fan:
+                raise GateDenied("operation_unauthorized", "这台 iBMC 只报告一个整体转速，不支持按风扇设定")
+            # 设备的风扇数为准：方案多出来的不下发，缺的保持设备当前值
+            applied = [int(speeds[i]) if speeds and i < len(speeds) else int(v) for i, v in enumerate(current)]
+            body = {"FanSpeedAdjustmentMode": "Manual", "FanManualModeTimeoutSeconds": HUAWEI_MANUAL_TIMEOUT, "FanSpeedLevelPercents": applied}
         else:
-            current = oem[key].get("FanSpeedLevelPercents")
-            level: Any = [int(pwm or 0)] * len(current) if isinstance(current, list) and current else int(pwm or 0)
+            level: Any = [int(pwm or 0)] * len(current) if per_fan else int(pwm or 0)
             body = {"FanSpeedAdjustmentMode": "Manual", "FanManualModeTimeoutSeconds": HUAWEI_MANUAL_TIMEOUT, "FanSpeedLevelPercents": level}
         _rf_patch(c, path, {"Oem": {key: body}}, etag)
         after = (c.get(path)[0].get("Oem") or {}).get(key) or {}
         ok = after.get("FanSpeedAdjustmentMode") == body["FanSpeedAdjustmentMode"]
+        if applied is not None:
+            ok = ok and after.get("FanSpeedLevelPercents") == applied
+            return DriverResult([f"Oem.{key}.FanSpeedLevelPercents = {applied}"], verified=ok, pwm=max(applied), speeds=speeds)
         return DriverResult([f"Oem.{key}.FanSpeedAdjustmentMode = {body['FanSpeedAdjustmentMode']}"], verified=ok, pwm=pwm)
 
 
@@ -499,7 +589,10 @@ HPE_LEVELS = (("MaximumCooling", "最大散热", 90), ("IncreasedCooling", "增�
 
 
 class HpeRedfishCoolingDriver:
-    def run(self, c: RedfishClient, profile: ThermalProfile, op: ThermalOperation, pwm: int | None) -> DriverResult:
+    def run(self, c: RedfishClient, profile: ThermalProfile, op: ThermalOperation, pwm: int | None,
+            speeds: list[int] | None = None) -> DriverResult:
+        if op == ThermalOperation.SET_SPEED_PER_FAN:
+            raise _per_fan_unsupported(profile)
         path, thermal, etag = _thermal_resource(c)
         hpe = (thermal.get("Oem") or {}).get("Hpe") or {}
         if "ThermalConfiguration" not in hpe:
@@ -530,7 +623,8 @@ DELL_RAW_STEPS = (PRODUCTION_CATALOG[0].restore_steps, PRODUCTION_CATALOG[0].set
 
 def _with_default_steps(profile: ThermalProfile) -> ThermalProfile:
     if profile.driver_id == "dell_idrac_raw_v1" and not profile.restore_steps:
-        return replace(profile, driver_id="ipmi_raw_v1", restore_steps=DELL_RAW_STEPS[0], set_steps=DELL_RAW_STEPS[1])
+        return replace(profile, driver_id="ipmi_raw_v1", restore_steps=DELL_RAW_STEPS[0], set_steps=DELL_RAW_STEPS[1],
+                       fan_steps=PRODUCTION_CATALOG[0].fan_steps)
     return profile
 
 
@@ -539,8 +633,9 @@ class ThermalOutcome:
     status: str  # verified / unconfirmed
     message: str
     observed: dict[str, Any]
-    mode: str  # auto / manual
+    mode: str  # auto / manual / per_fan
     pwm: int | None
+    speeds: list[int] | None = None
 
 
 def execute_thermal(
@@ -552,6 +647,7 @@ def execute_thermal(
     factory: ThermalClientFactory = PyghmiThermalClient,
     redfish_factory: RedfishClientFactory = default_redfish_factory,
     drivers: dict[str, Any] | None = None,
+    speeds: list[int] | None = None,
 ) -> ThermalOutcome:
     """只读识别 → 匹配命令 → 检查操作与转速 → 执行。门禁不通过抛 GateDenied（没有写调用）。
 
@@ -572,7 +668,7 @@ def execute_thermal(
         first = next(iter(ctxs))
         ident = client(first).identity() if first == "ipmi" else redfish_identity(client(first))
         profile = _with_default_steps(match_profile(catalog, ident))
-        check_operation(profile, op, pwm)
+        check_operation(profile, op, pwm, speeds)
         if profile.transport not in ctxs:
             need = TRANSPORT_LABEL.get(profile.transport, profile.transport)
             raise GateDenied("transport_missing", f"“{profile.label or profile.profile_id}”的风扇命令通过 {need} 下发，"
@@ -580,20 +676,21 @@ def execute_thermal(
         driver = (drivers or DRIVERS).get(profile.driver_id)
         if driver is None:
             raise GateDenied("driver_missing", f"风扇命令引用的驱动 {profile.driver_id} 不存在")
-        res = driver.run(client(profile.transport), profile, op, pwm)
+        res = driver.run(client(profile.transport), profile, op, pwm, speeds)
         source = SOURCE_LABEL.get(profile.evidence.source, "")
         observed = {"identity": ident.as_dict(), "profile": profile.profile_id, "profile_label": profile.label,
                     "source": profile.evidence.source.value, "transport": profile.transport, "steps": res.steps}
-        label = OPERATION_LABEL[op] + (f" {pwm}%" if pwm is not None else "")
+        label = OPERATION_LABEL[op] + (f" {pwm}%" if pwm is not None else "") + (f" {speeds}" if speeds else "")
         extra = "".join(f"；{t}" for t in (res.note, f"命令来源：{profile.label or profile.profile_id}（{source}）") if t)
-        mode = res.mode or ("auto" if op == ThermalOperation.RESTORE_AUTO else "manual")
+        mode = res.mode or {ThermalOperation.RESTORE_AUTO: "auto", ThermalOperation.SET_SPEED_ALL: "manual",
+                            ThermalOperation.SET_SPEED_PER_FAN: "per_fan"}[op]
         if res.verified:
-            return ThermalOutcome("verified", f"{label}：已查询确认{extra}", observed, mode, res.pwm)
+            return ThermalOutcome("verified", f"{label}：已查询确认{extra}", observed, mode, res.pwm, res.speeds)
         if profile.transport == "redfish":
             msg = f"{label}：BMC 已接受，但再次读取的设置与下发的不一致，无法确认已生效{extra}"
         else:
             msg = f"{label}：BMC 已接受；IPMI 无法回读控制模式，无法确认已生效（风扇转速变化不能证明已生效）{extra}"
-        return ThermalOutcome("unconfirmed", msg, observed, mode, res.pwm)
+        return ThermalOutcome("unconfirmed", msg, observed, mode, res.pwm, res.speeds)
     finally:
         for c in clients.values():
             c.close()

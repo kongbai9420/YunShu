@@ -33,7 +33,7 @@ docker run -d --name yunshu --restart unless-stopped \
   -v yunshu-keys:/etc/yunshu \
   -e YUNSHU_EMBEDDED_WORKER=1 \
   -e YUNSHU_SETUP_WIZARD=0 \
-  ghcr.io/kongbai9420/yunshu:4.4.0-beta.1
+  ghcr.io/kongbai9420/yunshu:4.4.0-beta.2
 ```
 
 - `yunshu-data` holds the database and platform backups. `yunshu-keys` holds the **master key** that encrypts device passwords; it must live apart from the data.
@@ -47,7 +47,7 @@ Create a folder, save this as `docker-compose.yml`, then run `docker compose up 
 # YunShu lightweight: single container with SQLite, for individuals / home labs / NAS
 services:
   yunshu:
-    image: ghcr.io/kongbai9420/yunshu:4.4.0-beta.1
+    image: ghcr.io/kongbai9420/yunshu:4.4.0-beta.2
     container_name: yunshu
     command: ["api"]
     ports:
@@ -78,7 +78,7 @@ PostgreSQL 17, a schema-migration job, the web/API service and one background wo
 ```yaml
 # YunShu standard: PostgreSQL 17 + migrate + API + worker
 x-yunshu: &yunshu
-  image: ghcr.io/kongbai9420/yunshu:4.4.0-beta.1
+  image: ghcr.io/kongbai9420/yunshu:4.4.0-beta.2
   volumes:
     - yunshu-data:/data
     - yunshu-keys:/etc/yunshu

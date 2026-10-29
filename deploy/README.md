@@ -33,7 +33,7 @@ docker run -d --name yunshu --restart unless-stopped \
   -v yunshu-keys:/etc/yunshu \
   -e YUNSHU_EMBEDDED_WORKER=1 \
   -e YUNSHU_SETUP_WIZARD=0 \
-  ghcr.io/kongbai9420/yunshu:4.4.0-beta.1
+  ghcr.io/kongbai9420/yunshu:4.4.0-beta.2
 ```
 
 - `yunshu-data`：数据库、平台备份。`yunshu-keys`：加密设备密码用的**主密钥**，必须和数据分开放。
@@ -47,7 +47,7 @@ docker run -d --name yunshu --restart unless-stopped \
 # 云枢 轻量版：单容器，SQLite，适合个人 / 家庭实验室 / NAS
 services:
   yunshu:
-    image: ghcr.io/kongbai9420/yunshu:4.4.0-beta.1
+    image: ghcr.io/kongbai9420/yunshu:4.4.0-beta.2
     container_name: yunshu
     command: ["api"]
     ports:
@@ -78,7 +78,7 @@ volumes:              # 卷名固定，换目录、换模板都还是同一份�
 ```yaml
 # 云枢 标准版：PostgreSQL 17 + 迁移 + API + Worker
 x-yunshu: &yunshu
-  image: ghcr.io/kongbai9420/yunshu:4.4.0-beta.1
+  image: ghcr.io/kongbai9420/yunshu:4.4.0-beta.2
   volumes:
     - yunshu-data:/data
     - yunshu-keys:/etc/yunshu

@@ -28,9 +28,9 @@ The tarball is built against a glibc 2.28 baseline, so Kylin V10 (SP1–SP3, gli
 Download `yunshu-<version>-linux-<arch>.tar.gz` and its `.sha256` from <https://github.com/kongbai9420/YunShu/releases>:
 
 ```bash
-sha256sum -c yunshu-4.4.0-beta.1-linux-amd64.tar.gz.sha256
-tar xzf yunshu-4.4.0-beta.1-linux-amd64.tar.gz
-cd yunshu-4.4.0-beta.1
+sha256sum -c yunshu-4.4.0-beta.2-linux-amd64.tar.gz.sha256
+tar xzf yunshu-4.4.0-beta.2-linux-amd64.tar.gz
+cd yunshu-4.4.0-beta.2
 sudo ./install.sh --start
 ```
 

@@ -20,14 +20,14 @@ Windows 安装包（MSI 与免安装 ZIP）**没有** Authenticode 代码签名�
 | [GitHub CLI `gh`](https://cli.github.com/) | 校验来源证明 | 2.49 或更新；需要先 `gh auth login` |
 | `sha256sum`（Linux）或 PowerShell `Get-FileHash`（Windows） | 核对文件 | 系统自带 |
 
-下面以 `4.4.0-beta.1` 为例，换成你下载的版本号。
+下面以 `4.4.0-beta.2` 为例，换成你下载的版本号。
 
 ## 1. 校验镜像
 
 先查出版本标签对应的多架构索引摘要（发布说明末尾也写着）：
 
 ```bash
-docker buildx imagetools inspect ghcr.io/kongbai9420/yunshu:4.4.0-beta.1
+docker buildx imagetools inspect ghcr.io/kongbai9420/yunshu:4.4.0-beta.2
 # 输出里 "Digest: sha256:…" 就是 <digest>
 ```
 
@@ -48,7 +48,7 @@ gh attestation verify oci://ghcr.io/kongbai9420/yunshu@<digest> --repo kongbai94
   --predicate-type https://spdx.dev/Document/v2.3
 ```
 
-校验通过后，部署时建议直接写摘要而不是标签，例如 `image: ghcr.io/kongbai9420/yunshu:4.4.0-beta.1@sha256:…`，这样标签以后被移动也不会换掉你的镜像。
+校验通过后，部署时建议直接写摘要而不是标签，例如 `image: ghcr.io/kongbai9420/yunshu:4.4.0-beta.2@sha256:…`，这样标签以后被移动也不会换掉你的镜像。
 
 ## 2. 校验发布文件
 
@@ -85,32 +85,32 @@ Get-Content .\SHA256SUMS | ForEach-Object {
 }
 ```
 
-只核对一个文件时：`(Get-FileHash .\Yunshu-4.4.0-beta.1-windows-amd64.msi).Hash`，与 `SHA256SUMS` 里同名那一行比较（大小写不影响）。
+只核对一个文件时：`(Get-FileHash .\Yunshu-4.4.0-beta.2-windows-amd64.msi).Hash`，与 `SHA256SUMS` 里同名那一行比较（大小写不影响）。
 
 **第三步（可选）：来源证明**
 
 每个文件都可以单独校验，不需要 `SHA256SUMS`：
 
 ```bash
-gh attestation verify yunshu-4.4.0-beta.1-linux-amd64.tar.gz --repo kongbai9420/YunShu
-gh attestation verify Yunshu-4.4.0-beta.1-windows-amd64.msi --repo kongbai9420/YunShu
+gh attestation verify yunshu-4.4.0-beta.2-linux-amd64.tar.gz --repo kongbai9420/YunShu
+gh attestation verify Yunshu-4.4.0-beta.2-windows-amd64.msi --repo kongbai9420/YunShu
 ```
 
 想同时限定构建它的工作流，可以加 `--signer-workflow kongbai9420/YunShu/.github/workflows/release.yml`。
 
 ## 3. 离线镜像包
 
-给不能访问镜像仓库的内网环境：`yunshu-4.4.0-beta.1-image-amd64.tar.gz` / `-arm64.tar.gz`，按服务器的架构选一个（`uname -m` 显示 `x86_64` 选 amd64，`aarch64` 选 arm64）。
+给不能访问镜像仓库的内网环境：`yunshu-4.4.0-beta.2-image-amd64.tar.gz` / `-arm64.tar.gz`，按服务器的架构选一个（`uname -m` 显示 `x86_64` 选 amd64，`aarch64` 选 arm64）。
 
 1. 按第 2 节核对校验值（或 `gh attestation verify`）。
 2. 导入：
 
    ```bash
-   docker load -i yunshu-4.4.0-beta.1-image-amd64.tar.gz
-   # Loaded image: ghcr.io/kongbai9420/yunshu:4.4.0-beta.1
+   docker load -i yunshu-4.4.0-beta.2-image-amd64.tar.gz
+   # Loaded image: ghcr.io/kongbai9420/yunshu:4.4.0-beta.2
    ```
 
-3. 之后按 [部署指南](README.md) 使用，`image:` 写 `ghcr.io/kongbai9420/yunshu:4.4.0-beta.1`，Docker 会直接用本地导入的镜像，不再联网拉取。
+3. 之后按 [部署指南](README.md) 使用，`image:` 写 `ghcr.io/kongbai9420/yunshu:4.4.0-beta.2`，Docker 会直接用本地导入的镜像，不再联网拉取。
 
 离线包是发布流水线从已签名的多架构镜像里按摘要取出本架构后 `docker save` 得到的，内容与在线镜像相同。对应的 SBOM 是同名的 `.spdx.json`。
 

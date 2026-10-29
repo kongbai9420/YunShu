@@ -18,8 +18,8 @@ If you only use it yourself on one PC and do not want a service, use the [portab
 Download `Yunshu-<version>-windows-amd64.msi` and the matching `.sha256` from the release page and compare the checksum:
 
 ```powershell
-(Get-FileHash -Algorithm SHA256 .\Yunshu-4.4.0-beta.1-windows-amd64.msi).Hash.ToLower()
-Get-Content .\Yunshu-4.4.0-beta.1-windows-amd64.msi.sha256
+(Get-FileHash -Algorithm SHA256 .\Yunshu-4.4.0-beta.2-windows-amd64.msi).Hash.ToLower()
+Get-Content .\Yunshu-4.4.0-beta.2-windows-amd64.msi.sha256
 ```
 
 > [!NOTE]
@@ -30,9 +30,9 @@ Get-Content .\Yunshu-4.4.0-beta.1-windows-amd64.msi.sha256
 **Silent install** (elevated PowerShell or command prompt):
 
 ```powershell
-msiexec /i Yunshu-4.4.0-beta.1-windows-amd64.msi /qn /l*v install.log
+msiexec /i Yunshu-4.4.0-beta.2-windows-amd64.msi /qn /l*v install.log
 # also add the firewall rule:
-msiexec /i Yunshu-4.4.0-beta.1-windows-amd64.msi /qn ADDLOCAL=ALL /l*v install.log
+msiexec /i Yunshu-4.4.0-beta.2-windows-amd64.msi /qn ADDLOCAL=ALL /l*v install.log
 ```
 
 What the installer sets up:
@@ -232,7 +232,7 @@ Do not run the desktop edition and the service against the same devices at the s
 "Settings → Apps → 云枢运维平台 → Uninstall", or:
 
 ```powershell
-msiexec /x Yunshu-4.4.0-beta.1-windows-amd64.msi /qn
+msiexec /x Yunshu-4.4.0-beta.2-windows-amd64.msi /qn
 ```
 
 Uninstalling stops and deletes the service and removes the program files, the PATH entry, the Start-menu entries and the firewall rule, but **keeps `C:\ProgramData\Yunshu`** (configuration, database, backups, master key, logs) so that a later reinstall continues where you left off. To remove everything, after backing up the data and the master key:
