@@ -15,7 +15,7 @@
 
 Servers · switches · virtualization · UPS · NAS — one inventory, unified collection, sensible alerts, guarded operations
 
-[**📖 Documentation (Chinese)**](https://kongbai9420.github.io/YunShu/) · [**Quick start**](#-quick-start) · [**Download**](https://github.com/kongbai9420/YunShu/releases) · [**Screenshots**](#-screenshots) · [中文](README.md)
+[**📖 Documentation (Chinese)**](https://kongbai9420.github.io/YunShu/) · [**Quick start**](#-quick-start) · [**Download**](https://github.com/kongbai9420/YunShu/releases) · [**Screenshots**](#-screenshots) · [**💬 QQ group**](https://qm.qq.com/q/C2VkzggZge) · [中文](README.md)
 
 </div>
 
@@ -181,6 +181,11 @@ Download `yunshu-<version>-linux-<amd64|arm64>.tar.gz` from [Releases](https://g
 - **Single-user desktop**: download the portable ZIP, unzip and double-click; local use only.
 
 Verify downloads with the [verification guide](deploy/VERIFY.en.md).
+
+## 💬 Community
+
+- **QQ beta-testing group: 317151818** ([join via link](https://qm.qq.com/q/C2VkzggZge), Chinese): questions, device compatibility reports and feature ideas.
+- Bugs and requests are also welcome in [GitHub Issues](https://github.com/kongbai9420/YunShu/issues).
 
 ## 🛠️ Contributing
 

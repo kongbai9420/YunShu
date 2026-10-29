@@ -15,7 +15,7 @@
 
 服务器 · 交换机 · 虚拟化 · UPS · NAS —— 一处建档、统一采集、按需告警、受控操作
 
-[**📖 使用文档**](https://kongbai9420.github.io/YunShu/) · [**快速开始**](#-快速开始) · [**下载**](https://github.com/kongbai9420/YunShu/releases) · [**界面预览**](#-界面预览) · [English](README.en.md)
+[**📖 使用文档**](https://kongbai9420.github.io/YunShu/) · [**快速开始**](#-快速开始) · [**下载**](https://github.com/kongbai9420/YunShu/releases) · [**界面预览**](#-界面预览) · [**💬 QQ 交流群**](https://qm.qq.com/q/C2VkzggZge) · [English](README.en.md)
 
 </div>
 
@@ -181,6 +181,11 @@ volumes:
 - **单人桌面版**：下载免安装 ZIP，解压后双击运行，只在本机使用。
 
 下载的文件可以按 [校验说明](deploy/VERIFY.md) 核对签名与校验值。
+
+## 💬 交流与反馈
+
+- **QQ 内测群：317151818**（[点击链接加入群聊【云枢-服务器集群管理】](https://qm.qq.com/q/C2VkzggZge)）：试用问题、设备适配反馈、功能建议都可以在群里交流。
+- 发现问题或有需求，也欢迎在 [GitHub Issues](https://github.com/kongbai9420/YunShu/issues) 提交。
 
 ## 🛠️ 参与开发
 
