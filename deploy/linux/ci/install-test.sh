@@ -62,13 +62,14 @@ wait_ready() {
     fail "/api/ready 没有在 240 秒内返回 200"
 }
 
-login() {  # login <密码>：成功时保存 Cookie 与 CSRF 令牌，输出响应 JSON
-    local body
-    rm -f "$JAR"
-    body="$(curl -sS -f -c "$JAR" -H 'Content-Type: application/json' \
-        -d "{\"username\":\"admin\",\"password\":\"$1\"}" "$BASE/api/auth/login")" || return 1
-    CSRF="$(printf '%s' "$body" | grep -o '"csrf_token":"[^"]*"' | cut -d'"' -f4)"
-    printf '%s' "$body"
+LOGIN_BODY=/tmp/yunshu-login.json
+login() {  # login <密码>：成功时保存 Cookie 与 CSRF 令牌，响应 JSON 写到 $LOGIN_BODY
+    # 不往标准输出写：调用方若用管道（login … | grep），login 在子 shell 里运行，设置的 CSRF 变量就丢了
+    rm -f "$JAR" "$LOGIN_BODY"
+    curl -sS -f -c "$JAR" -o "$LOGIN_BODY" -H 'Content-Type: application/json' \
+        -d "{\"username\":\"admin\",\"password\":\"$1\"}" "$BASE/api/auth/login" || return 1
+    CSRF="$(grep -o '"csrf_token":"[^"]*"' "$LOGIN_BODY" | cut -d'"' -f4)"
+    [ -n "$CSRF" ]
 }
 
 api() {  # api <方法> <路径> [JSON]
@@ -81,8 +82,10 @@ api() {  # api <方法> <路径> [JSON]
 
 first_use() {
     step "首次登录要求改密码；改密码、建一台伪造资产"
-    login admin123 | grep -q '"require_password_change":true' || fail "首次登录没有要求修改密码"
+    { login admin123 && grep -q '"require_password_change":true' "$LOGIN_BODY"; } || fail "首次登录没有要求修改密码"
     api POST /api/auth/password "{\"old_password\":\"admin123\",\"new_password\":\"$NEW_PASSWORD\"}" >/dev/null || fail "修改密码失败"
+    # 改密码会结束当前会话，用新密码重新登录
+    login "$NEW_PASSWORD" || fail "改密码后用新密码登录失败"
     api POST /api/assets '{"name":"ci-fake-server-1","form":"physical","role":"server","vendor":"Example","notes":"CI fake"}' >/dev/null \
         || fail "创建资产失败"
     assert_data
@@ -90,10 +93,10 @@ first_use() {
 
 assert_data() {  # 数据还在：新密码能登录、旧密码不能、资产数量为 1
     step "检查数据：新密码登录、资产数量"
-    login "$NEW_PASSWORD" | grep -q '"require_password_change":false' || fail "新密码登录失败（数据没有保留？）"
+    { login "$NEW_PASSWORD" && grep -q '"require_password_change":false' "$LOGIN_BODY"; } || fail "新密码登录失败（数据没有保留？）"
     api GET /api/assets | grep -q '"total":1' || fail "资产数量不是 1"
     if login admin123 >/dev/null 2>&1; then fail "初始密码仍然可以登录"; fi
-    login "$NEW_PASSWORD" >/dev/null
+    login "$NEW_PASSWORD" || fail "新密码登录失败"
 }
 
 # ---- 检查 ---------------------------------------------------------------------
