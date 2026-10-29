@@ -227,7 +227,7 @@ External monitoring can poll `http://<server>:8080/api/ready` (200 = database re
 
 ## Building the tarball from source
 
-Needs Docker (builds in a digest-pinned AlmaLinux 8 image with Python 3.11 from AppStream, dependencies installed by hash; the PyPA manylinux_2_28 image's Python is a static build that PyInstaller cannot use):
+Needs Docker (builds in a digest-pinned AlmaLinux 8 image with CPython 3.11 from python-build-standalone, version and SHA-256 pinned; dependencies installed by hash):
 
 ```bash
 cd frontend && npm ci && npm run build && cd ..
